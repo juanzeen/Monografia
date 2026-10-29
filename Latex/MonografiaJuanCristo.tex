@@ -1,0 +1,103 @@
+\documentclass[12pt,a4paper]{report}
+
+% --- Pacotes Fundamentais ---
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[brazil]{babel}
+\usepackage{amsmath,amsfonts,amssymb}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{microtype}
+\usepackage{url}
+\usepackage{cite}
+\usepackage{float}
+\usepackage{titlesec}
+\usepackage{caption}
+
+% --- Geometria e Formatação ABNT ---
+\usepackage[a4paper, top=3cm, bottom=2cm, left=3cm, right=2cm]{geometry}
+\usepackage{setspace}
+\onehalfspacing
+\usepackage{indentfirst}
+\setlength{\parindent}{1.25cm}
+\graphicspath{ {./images/} }
+
+% --- Configurações de Hiperlinks ---
+\usepackage[colorlinks=true,
+            linkcolor=blue,
+            citecolor=blue,
+            urlcolor=blue,
+            bookmarks=true]{hyperref}
+
+% --- Ajuste dos Títulos de Capítulos e Seções ---
+\titleformat{\chapter}[hang]
+  {\normalfont\bfseries\LARGE}{\thechapter}{1em}{}
+\titlespacing*{\chapter}{0pt}{-20pt}{20pt}
+
+\titleformat{\section}[hang]
+  {\normalfont\bfseries\Large}{\thesection}{1em}{}
+\titlespacing*{\section}{0pt}{15pt}{10pt}
+
+\titleformat{\subsection}[hang]
+  {\normalfont\bfseries\large}{\thesubsection}{1em}{}
+\titlespacing*{\subsection}{0pt}{12pt}{8pt}
+
+\begin{document}
+
+% -----------------------------------------------------------------------------
+% ELEMENTOS PRÉ-TEXTUAIS: CAPA E FOLHA DE ROSTO
+% -----------------------------------------------------------------------------
+\begin{titlepage}
+    \centering
+    \vspace*{1cm}
+    {\large \textbf{JUAN AUGUSTO CRISTO HYGINO}\par}
+    \vspace{6cm}
+    {\LARGE \textbf{ENGENHARIA DE UMA CAMADA DE GOVERNANÇA, AUDITORIA FORENSE E OBSERVABILIDADE EM TEMPO DE EXECUÇÃO PARA ECOSSISTEMAS BASEADOS NO MODEL CONTEXT PROTOCOL (MCP)}\par}
+    \vfill
+    {\large \textbf{2026}\par}
+    \vspace*{1cm}
+\end{titlepage}
+
+ \begin{titlepage}
+     \centering
+     \vspace*{1cm}
+     {\large \textbf{JUAN AUGUSTO CRISTO HYGINO}\par}
+     \vspace{4.5cm}
+     {\LARGE \textbf{ENGENHARIA DE UMA CAMADA DE GOVERNANÇA, AUDITORIA FORENSE E OBSERVABILIDADE EM TEMPO DE EXECUÇÃO PARA ECOSSISTEMAS BASEADOS NO MODEL CONTEXT PROTOCOL (MCP)}\par}
+     \vspace{2.5cm}
+     \hfill
+     \begin{minipage}{0.52\textwidth}
+         \linespread{1.1}\selectfont
+         Trabalho de Conclusão de Curso submetido como requisito parcial para a obtenção do grau de Bacharel em Ciência da Computação / Engenharia de Software.\\[0.4cm]
+         \textbf{Orientador:} Profa. Dra. Annabel D.R. Tamariz
+     \end{minipage}
+     \vfill
+     {\large \textbf{2026}\par}
+     \vspace*{1cm}
+ \end{titlepage}
+
+% --- Sumário ---
+\tableofcontents
+\thispagestyle{empty}
+\clearpage
+
+% Reinicia numeração para o corpo textual
+\pagenumbering{arabic}
+\setcounter{page}{1}
+
+% -----------------------------------------------------------------------------
+% ELEMENTOS TEXTUAIS: CAPÍTULO 1 - INTRODUÇÃO
+% -----------------------------------------------------------------------------
+\input{capitulos/1_introducao}
+\input{capitulos/2_cap.tex}
+
+% -----------------------------------------------------------------------------
+% ELEMENTOS PÓS-TEXTUAIS: REFERÊNCIAS BIBLIOGRÁFICAS
+% -----------------------------------------------------------------------------
+\clearpage
+\phantomsection
+\addcontentsline{toc}{chapter}{Referências Bibliográficas}
+\bibliographystyle{alpha}
+\bibliography{referencias}
+
+\end{document}
