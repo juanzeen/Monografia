@@ -9,10 +9,11 @@
 \usepackage{booktabs}
 \usepackage{microtype}
 \usepackage{url}
-\usepackage{cite}
 \usepackage{float}
 \usepackage{titlesec}
 \usepackage{caption}
+\usepackage{tocloft}
+\usepackage{hyperref}
 
 % --- Geometria e Formatação ABNT ---
 \usepackage[a4paper, top=3cm, bottom=2cm, left=3cm, right=2cm]{geometry}
@@ -23,11 +24,16 @@
 \graphicspath{ {./images/} }
 
 % --- Configurações de Hiperlinks ---
-\usepackage[colorlinks=true,
-            linkcolor=blue,
-            citecolor=blue,
-            urlcolor=blue,
-            bookmarks=true]{hyperref}
+\hypersetup{
+            colorlinks=true,
+            linkcolor=black,
+            citecolor=black,
+            urlcolor=black,
+            }
+
+% --- Citações e Referências no Padrão ABNT (NBR 6023 / NBR 10520) ---
+\usepackage[alf,abnt-emphasize=bf]{abntex2cite}
+\DeclareUrlCommand\path{\def\UrlLeft{}\def\UrlRight{}\urlstyle{tt}}
 
 % --- Ajuste dos Títulos de Capítulos e Seções ---
 \titleformat{\chapter}[hang]
@@ -42,6 +48,11 @@
   {\normalfont\bfseries\large}{\thesubsection}{1em}{}
 \titlespacing*{\subsection}{0pt}{12pt}{8pt}
 
+\cftsetindents{chapter}{0em}{1.0em}
+\cftsetindents{section}{1.3em}{1.5em}
+\cftsetindents{subsection}{2.5em}{2.5em}
+
+
 \begin{document}
 
 % -----------------------------------------------------------------------------
@@ -49,11 +60,13 @@
 % -----------------------------------------------------------------------------
 \begin{titlepage}
     \centering
-    \vspace*{1cm}
+    {\large \textbf{UNIVERSIDADE ESTADUAL DO NORTE FLUMINENSE DARCY RIBEIRO}\par}
+    \vspace*{3cm}
     {\large \textbf{JUAN AUGUSTO CRISTO HYGINO}\par}
-    \vspace{6cm}
-    {\LARGE \textbf{ENGENHARIA DE UMA CAMADA DE GOVERNANÇA, AUDITORIA FORENSE E OBSERVABILIDADE EM TEMPO DE EXECUÇÃO PARA ECOSSISTEMAS BASEADOS NO MODEL CONTEXT PROTOCOL (MCP)}\par}
+    \vspace{5cm}
+    {\large \textbf{ENGENHARIA DE UMA CAMADA DE GOVERNANÇA, AUDITORIA FORENSE E OBSERVABILIDADE EM TEMPO DE EXECUÇÃO PARA ECOSSISTEMAS BASEADOS NO MODEL CONTEXT PROTOCOL (MCP)}\par}
     \vfill
+    {\large \textbf{Campos dos Goytacazes}\par}
     {\large \textbf{2026}\par}
     \vspace*{1cm}
 \end{titlepage}
@@ -63,15 +76,17 @@
      \vspace*{1cm}
      {\large \textbf{JUAN AUGUSTO CRISTO HYGINO}\par}
      \vspace{4.5cm}
-     {\LARGE \textbf{ENGENHARIA DE UMA CAMADA DE GOVERNANÇA, AUDITORIA FORENSE E OBSERVABILIDADE EM TEMPO DE EXECUÇÃO PARA ECOSSISTEMAS BASEADOS NO MODEL CONTEXT PROTOCOL (MCP)}\par}
+     {\large \textbf{ENGENHARIA DE UMA CAMADA DE GOVERNANÇA, AUDITORIA FORENSE E OBSERVABILIDADE EM TEMPO DE EXECUÇÃO PARA ECOSSISTEMAS BASEADOS NO MODEL CONTEXT PROTOCOL (MCP)}\par}
      \vspace{2.5cm}
      \hfill
      \begin{minipage}{0.52\textwidth}
          \linespread{1.1}\selectfont
-         Trabalho de Conclusão de Curso submetido como requisito parcial para a obtenção do grau de Bacharel em Ciência da Computação / Engenharia de Software.\\[0.4cm]
+         Monografia submetida como requisito parcial para a obtenção do grau de Bacharel em Ciência da Computação.\\[0.4cm]
          \textbf{Orientador:} Profa. Dra. Annabel D.R. Tamariz
      \end{minipage}
      \vfill
+    {\large \textbf{Campos dos Goytacazes}\par}
+
      {\large \textbf{2026}\par}
      \vspace*{1cm}
  \end{titlepage}
@@ -90,6 +105,7 @@
 % -----------------------------------------------------------------------------
 \input{capitulos/1_introducao}
 \input{capitulos/2_cap.tex}
+\input{capitulos/3_modelo.tex}
 
 % -----------------------------------------------------------------------------
 % ELEMENTOS PÓS-TEXTUAIS: REFERÊNCIAS BIBLIOGRÁFICAS
@@ -97,7 +113,6 @@
 \clearpage
 \phantomsection
 \addcontentsline{toc}{chapter}{Referências Bibliográficas}
-\bibliographystyle{alpha}
 \bibliography{referencias}
 
 \end{document}

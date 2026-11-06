@@ -1,30 +1,13 @@
 \chapter{Introdução}
 \label{cap:introducao}
 
-A engenharia de software passa atualmente por uma profunda transformação com a transição dos Modelos de Linguagem de Larga Escala (\textit{Large Language Models} - LLMs) de interfaces conversacionais passivas para agentes autônomos orientados a objetivos. Diferente do modelo tradicional de perguntas e respostas pontuais, esses agentes operam em ciclos contínuos de raciocínio, planejamento e ação. Eles dividem metas complexas em etapas menores, definem parâmetros de execução e acionam rotinas em ambientes computacionais distribuídos \cite{buhler2026agentbound,singh2026mcpsecure}.
+A engenharia de software passa atualmente por uma transformação significativa com a evolução dos Modelos de Linguagem de Larga Escala (\textit{Large Language Models} - LLMs) de interfaces conversacionais passivas para agentes autônomos orientados a objetivos. Diferente do modelo tradicional de consultas isoladas, esses agentes operam em ciclos contínuos de raciocínio, planejamento e ação, dividindo metas complexas em etapas menores e acionando rotinas externas em ambientes distribuídos \cite{buhler2026agentbound,singh2026mcpsecure}.
 
-Para interagir com o mundo real e superar as limitações de seus dados de treinamento estáticos, os agentes de IA dependem do mecanismo de chamada de ferramentas (\textit{tool calling}) e do acesso a dados contextuais externos. Essas fontes incluem bancos de dados relacionais, sistemas de arquivos locais, repositórios de código e interfaces de programação de aplicações (APIs) \cite{zhu2025miniscope,hasan2026mcp}. No entanto, a integração entre modelos de linguagem e ferramentas externas sempre sofreu com a fragmentação técnica: cada plataforma adotava conectores proprietários e soluções pontuais, gerando forte acoplamento, problemas de compatibilidade e políticas de segurança frágeis ou inconsistentes.
+Para interagir com sistemas reais além de seus dados estáticos de treinamento, os agentes dependem da invocação de ferramentas (\textit{tool calling}) e do acesso a fontes externas, como bancos de dados, sistemas de arquivos e interfaces de programação de aplicações (APIs) \cite{hou2025mcp,hasan2026mcp}. Inicialmente, essa integração sofria com forte fragmentação técnica, pois cada plataforma utilizava conectores proprietários e incompatíveis entre si. Para padronizar essa comunicação, a Anthropic lançou no final de 2024 o \textit{Model Context Protocol} (MCP), um protocolo aberto cliente-servidor que rapidamente se consolidou como o padrão da indústria para conectar aplicações de IA (hospedeiros e clientes) a provedores de contexto e ferramentas (servidores) \cite{hou2025mcp,guo2025measurement}, conforme ilustrado na Figura~\ref{fig:integration-arch}.
 
-Para resolver essa fragmentação, a Anthropic lançou no final de 2024 o \textit{Model Context Protocol} (MCP), uma arquitetura aberta de comunicação cliente-servidor baseada no protocolo JSON-RPC 2.0. O MCP rapidamente se consolidou como o padrão da indústria para conectar aplicações que hospedam modelos de IA (\textit{MCP Hosts/Clients}) a fontes de dados e ferramentas de execução (\textit{MCP Servers}) \cite{soriaparra2026mcp,hasan2026mcp}. Ao padronizar três conceitos fundamentais: ferramentas executáveis (\textit{tools}), dados e arquivos de leitura (\textit{resources}) e modelos de instrução (\textit{prompts}), o MCP permitiu que uma mesma aplicação cliente se conecte a dezenas de servidores locais (via canais de comunicação interprocessos \textit{stdio}) ou remotos (inicialmente via SSE e atualmente via \textit{Streamable HTTP}) \cite{soriaparra2026mcp}.
+Apesar de simplificar a interoperabilidade, a rápida adoção do MCP expôs uma superfície de ataque crítica \cite{guo2025measurement,hou2025mcp}. O protocolo opera sob uma postura de \textbf{confiança implícita}: após a conexão inicial, o agente obtém acesso irrestrito às ferramentas expostas pelo servidor, que executa operações com os mesmos privilégios do usuário no sistema operacional \cite{buhler2026agentbound,singh2026mcpsecure}. Estudos recentes demonstram que essa arquitetura está sujeita a vulnerabilidades de código, envenenamento semântico de ferramentas, ataques em cadeia de suprimentos e falhas de controle de acesso \cite{hasan2026mcp,jang2026hierarchical,zhang2025acfix}, cujas especificações técnicas e dados empíricos são detalhados no Capítulo~\ref{cap:fundamentacao}.
 
-
-\begin{figure}[H]
-  \centering
-  \caption{Arquitetura de Integração do Model Context Protocol.}
-  \includegraphics[scale=0.4]{mcp-official-anthropic-diagram.jpg}
-  \label{fig:integration-arch}
-  \caption*{Fonte: Anthropic (2024)}
-\end{figure}
-
-Apesar da facilidade de integração oferecida pelo protocolo, pesquisas recentes mostram que essa rápida expansão introduziu uma superfície de ataque ampla e preocupante no ecossistema de software \cite{guo2025measurement,hou2025mcp}. O MCP foi concebido sob uma postura estrutural de \textbf{confiança implícita}: uma vez realizada a conexão inicial entre o cliente e o servidor, o agente passa a ter acesso aberto a todas as ferramentas expostas, executando ações no sistema operacional com os mesmos privilégios do usuário logado \cite{buhler2026agentbound,singh2026mcpsecure}.
-
-Estudos recentes de medição em larga escala comprovam a gravidade desse cenário. Em uma análise empírica de 1.899 servidores MCP de código aberto, Hasan et al. \cite{hasan2026mcp} identificaram que o protocolo apresenta uma superfície dual de ataque: além de 7,2\% dos servidores conterem falhas clássicas no código-fonte (com credenciais e chaves de acesso gravadas em texto simples em 3,6\% dos projetos), 5,5\% dos servidores já sofrem de envenenamento de ferramentas (\textit{Tool Poisoning}). Nesse tipo de ataque, descrições e esquemas das ferramentas são alterados de forma maliciosa para induzir o modelo de linguagem a tomar decisões incorretas ou prejudiciais, sem que o código executável precise ser modificado. Além disso, Guo et al. \cite{guo2025measurement} demonstraram que mais de 50\% dos servidores MCP em uso executam chamadas sensíveis no sistema hospedeiro (como execução de comandos de shell, leitura de arquivos e conexões de rede irrestritas) sem qualquer mecanismo de isolamento de processos.
-
-Conforme analisado por Jang e Lee \cite{jang2026hierarchical}, o protocolo MCP funciona como um canal de integração que herda riscos de segurança em três camadas diferentes: na camada da própria LLM (injeções indiretas de prompt e alucinações), na camada do protocolo (ataques de intermediação maliciosa como \textit{Confused Deputy} e \textit{Puppet Attacks}) e na camada de infraestrutura de rede (envenenamento de DNS e ataques de atualização fraudulenta conhecidos como \textit{Rug Pull}, como o incidente registrado no servidor \texttt{postmark-mcp}).
-
-Por outro lado, Bühler et al. \cite{buhler2026agentbound} destacaram a existência da \textbf{lacuna semântica} (\textit{Semantic Gap}) na segurança de agentes de IA: mecanismos tradicionais de isolamento do sistema operacional (como contêineres e políticas de controle de acesso de kernel) são essenciais para conter danos ao hospedeiro, mas não conseguem avaliar a intenção do agente nem impedir o uso indevido de ferramentas que tenham sido autorizadas no sistema. Ao mesmo tempo, Zhang et al. \cite{zhang2025acfix} comprovaram que confiar decisões de acesso à saída probabilística de modelos de linguagem gera falhas de quebra de controle de acesso (\textit{Broken Access Control}) em 47,4\% dos casos, reforçando a necessidade de aplicar modelos determinísticos de Controle de Acesso Baseado em Papéis (\textit{Role-Based Access Control} - RBAC).
-
-Diante desse cenário, percebe-se a falta de uma solução unificada que combine a aplicação prática do Princípio do Menor Privilégio (\textit{Principle of Least Privilege}) em tempo de execução, a geração de registros de auditoria forense confiáveis e a observabilidade detalhada do tráfego de mensagens do protocolo. É exatamente nesse espaço de pesquisa que este trabalho se desenvolve.
+Diante desse cenário, observa-se a ausência de um mecanismo unificado que combine a aplicação determinística do Princípio do Menor Privilégio em tempo de execução, a geração de registros de auditoria forense confiáveis e a observabilidade padronizada do tráfego de mensagens. É nessa lacuna de pesquisa que este trabalho se desenvolve.
 
 % -----------------------------------------------------------------------------
 % MOTIVAÇÃO
@@ -32,55 +15,58 @@ Diante desse cenário, percebe-se a falta de uma solução unificada que combine
 \section{Motivação}
 \label{sec:motivacao}
 
-O avanço rápido das tecnologias baseadas em modelos de linguagem fez com que os agentes autônomos deixassem de ser apenas experimentos de laboratório e passassem a ser integrados diretamente a processos produtivos e corporativos. Em empresas de tecnologia, finanças, atendimento ao cliente e desenvolvimento de software, esses agentes já são empregados para automatizar tarefas complexas, como consultar e atualizar bancos de dados, gerar e aplicar modificações em repositórios de código, acionar rotinas de integração contínua e interagir com serviços em nuvem.
+O avanço recente dos modelos de linguagem impulsionou a adoção de agentes autônomos diretamente em ambientes corporativos e produtivos. Em setores como tecnologia, finanças e desenvolvimento de software, esses agentes já automatizam tarefas críticas, incluindo consultas e alterações em bancos de dados, gerenciamento de repositórios de código e interação com serviços em nuvem.
 
-Nesse ecossistema em expansão, o Model Context Protocol (MCP) assumiu um papel central como a principal especificação de integração, sendo rapidamente adotado por grandes plataformas de desenvolvimento, ambientes integrados (IDEs) e clientes de IA. Essa ampla aceitação deve-se à simplicidade e à conveniência com que o protocolo permite que desenvolvedores disponibilizem dados e ferramentas para modelos inteligentes.
+Nesse contexto, o protocolo MCP assumiu papel central por permitir que desenvolvedores conectem fontes de dados e ferramentas a modelos inteligentes com facilidade. Entretanto, priorizou-se a rapidez de integração em detrimento de mecanismos nativos de governança e segurança. Na prática, agentes corporativos frequentemente operam com permissões excessivas, podendo causar danos operacionais severos caso sofram manipulações externas ou desvios de execução.
 
-Entretanto, essa rápida popularização gerou um descompasso preocupante: priorizou-se a velocidade de conexão e a facilidade de uso, enquanto os mecanismos de controle, governança e segurança foram deixados em segundo plano. Na prática, quando um agente de IA recebe acesso a um servidor MCP em um ambiente corporativo, ele frequentemente passa a operar com permissões excessivas, capazes de causar prejuízos operacionais graves caso o modelo interprete instruções incorretas, sofra manipulações maliciosas ou alucine durante a execução.
-
-Além dos riscos operacionais diretos, como a exclusão acidental de arquivos ou a alteração indevida de registros em bancos de dados, a ausência de mecanismos rigorosos de controle expõe as organizações a sérios riscos regulatórios. Normas de proteção de dados (como a LGPD no Brasil e a GDPR na União Europeia) e padrões de segurança da informação exigem que qualquer acesso a informações sensíveis seja rigorosamente controlado, registrado e auditável. Quando uma organização não consegue comprovar quem autorizou uma ação, quais ferramentas foram executadas por um agente e se os registros de log foram alterados, ela fica exposta a penalidades legais, falhas de conformidade e danos à sua reputação.
-
-Portanto, a motivação deste trabalho reside na necessidade urgente de desenvolver soluções práticas e eficientes que permitam às organizações aproveitar a automação e o poder dos agentes de IA baseados em MCP, sem abrir mão da segurança, do controle de acesso e da capacidade de auditar cada ação executada.
+Além dos riscos operacionais, a falta de controle rigoroso expõe as organizações a passivos regulatórios. Normas de proteção de dados (como a LGPD e a GDPR) e padrões de segurança da informação exigem que o acesso a recursos sensíveis seja restrito, registrado e auditável. Assim, a motivação deste trabalho reside na necessidade de viabilizar o uso corporativo seguro de agentes baseados em MCP, aliando controle de acesso estrito, rastreabilidade forense e monitoramento contínuo.
 
 % -----------------------------------------------------------------------------
 % PROBLEMÁTICA
 % -----------------------------------------------------------------------------
-\section{Problemática}
+\section{Formulação do Problema}
 \label{sec:problematica}
 
-A especificação técnica oficial do Model Context Protocol \cite{soriaparra2026mcp} padronizou o modelo de transporte e o formato das mensagens JSON-RPC 2.0, mas não incluiu mecanismos nativos de governança ou controle de acesso em tempo de execução. Em vez disso, a especificação delegou as decisões de segurança aos clientes hospedeiros ou à confirmação manual do usuário por meio de janelas de diálogo (\textit{prompts} de aprovação).
+A especificação oficial do protocolo MCP \cite{hou2025mcp,singh2026mcpsecure} padronizou o transporte e a troca de mensagens entre agentes e ferramentas, mas delegou as decisões de segurança aos aplicativos hospedeiros ou à confirmação manual do usuário. Essa abordagem gera fadiga de alertas em operações contínuas e mantém o ambiente exposto ao modelo de confiança implícita do protocolo, às limitações da lacuna semântica de isolamentos tradicionais \cite{buhler2026agentbound} e ao risco de delegar decisões de acesso ao próprio modelo de linguagem \cite{zhang2025acfix}. Diante desse cenário, a problemática desta investigação divide-se em um problema geral e quatro subproblemas diretamente correlacionados às hipóteses e aos objetivos do trabalho.
 
-Na prática diária, essa abordagem apresenta falhas estruturais graves. Por um lado, depender exclusivamente da confirmação manual do usuário gera fadiga de alertas: diante de dezenas de solicitações contínuas, os usuários tendem a aprovar chamadas sem verificar os parâmetros técnicos detalhados de cada operação. Por outro lado, o modelo de confiança implícita do protocolo permite que, após a conexão inicial, o agente execute qualquer ferramenta disponibilizada pelo servidor. Esse cenário resulta em quatro problemas fundamentais:
+\subsection{Problema Geral}
+\label{subsec:problema_geral}
+
+O problema geral desta pesquisa consiste na ausência de uma camada intermediária de governança em tempo de execução para ecossistemas baseados no protocolo MCP que seja capaz de impor controle de acesso determinístico segundo o Princípio do Menor Privilégio e o Controle de Acesso Baseado em Papéis (\textit{Role-Based Access Control} - RBAC), assegurar auditoria forense imutável e fornecer observabilidade padronizada, sem exigir alterações no código-fonte dos clientes e servidores existentes e mantendo sobrecarga de latência imperceptível em produção.
+
+\subsection{Subproblemas}
+\label{subsec:subproblemas}
 
 \begin{enumerate}
-  \item \textbf{Falta de Mediação e Controle em Tempo de Execução:} Inexistência de um ponto de aplicação de políticas (\textit{Policy Enforcement Point} - PEP) que inspecione as mensagens trocadas entre o cliente e o servidor. Quando um agente sofre um desvio de comportamento provocado por uma injeção indireta de prompt inserida em um dado externo não confiável, ele pode acionar ferramentas com efeitos destrutivos (como apagar dados ou sobrescrever arquivos) sem que qualquer regra impeça a execução \cite{singh2026mcpsecure};
+  \item \textbf{Fragmentação no Mapeamento de Ameaças do Ecossistema:} Carência de uma sistematização prática que consolide as vulnerabilidades de código, de protocolo e de manipulação semântica (como o envenenamento de ferramentas e a deriva de privilégios) em cenários adversariais reprodutíveis para validação de defesas \cite{hasan2026mcp,hou2025mcp,jang2026hierarchical};
 
-  \item \textbf{Ausência de Controle de Acesso Baseado em Papéis (RBAC):} O protocolo expõe ferramentas de leitura e de escrita de forma indiferenciada na mesma sessão de trabalho. Não existe uma separação formal entre operações seguras (como consultas informativas) e operações críticas que alteram o estado do sistema, deixando os ambientes vulneráveis a falhas generalizadas de controle de acesso (\textit{Broken Access Control}) \cite{zhang2025acfix,zhu2025miniscope};
+  \item \textbf{Falta de Mediação Transparente no Canal de Comunicação:} Inexistência de um mecanismo de interceptação não invasivo entre cliente e servidor que filtre chamadas maliciosas em tempo de execução sem demandar a refatoração de servidores comunitários ou legados \cite{singh2026mcpsecure,guo2025measurement};
 
-  \item \textbf{Dificuldade de Auditoria Forense e Falta de Garantia de Integridade:} Os servidores MCP geram registros de log heterogêneos, voláteis e desprovidos de proteção criptográfica contra adulteração (\textit{tamper-evident}). Diante de um incidente de segurança ou de uma ação indevida do agente, torna-se praticamente impossível reconstituir com exatidão a cadeia de eventos: qual modelo disparou a ferramenta, com quais argumentos, sob qual contexto e se os registros foram alterados posteriormente;
+  \item \textbf{Ausência Integrada de Controle RBAC, Auditoria Imutável e Telemetria:} Exposição simultânea de ferramentas de leitura e de escrita na mesma sessão sem segregação formal de papéis \cite{zhang2025acfix,singh2026mcpsecure}, somada à geração de registros locais voláteis vulneráveis à adulteração e à falta de observabilidade distribuída padronizada em tempo real \cite{jang2026hierarchical};
 
-  \item \textbf{Falta de Visibilidade Operacional e Telemetria em Tempo Real:} Embora a especificação mais recente do MCP sugira a adoção de padrões abertos como o OpenTelemetry \cite{soriaparra2026mcp}, as implementações práticas não dispõem de instrumentação centralizada. Equipes de engenharia e segurança não conseguem visualizar em tempo real as taxas de chamadas, as requisições bloqueadas nem o comportamento de latência das conexões.
+  \item \textbf{Compromisso entre Rigor de Segurança, Desempenho e Comportamento do Agente:} Dificuldade de bloquear ações não autorizadas de forma determinística mantendo latência inferior a um milissegundo e induzindo a adaptação segura do planejamento do agente (moldagem comportamental), sem degradar a fluidez operacional do sistema hospedeiro \cite{singh2026mcpsecure}.
 \end{enumerate}
-
-Essa problemática é agravada pelo fato de que os mecanismos clássicos de segurança no sistema operacional não entendem o significado das operações solicitadas pelo agente (a chamada \textit{lacuna semântica} descrita por Bühler et al. \cite{buhler2026agentbound}), enquanto delegar o controle de acesso ao próprio modelo de linguagem resulta em decisões falhas e inconsistentes \cite{zhang2025acfix}.
-
-Com base nessas limitações, define-se a seguinte \textbf{Pergunta de Pesquisa (\textit{Research Question})}:
-
-\begin{quote}
-  \textit{Como conceber, implementar e validar experimentalmente uma camada intermediária de governança em tempo de execução para ecossistemas baseados no Model Context Protocol (MCP) que aplique controle de acesso baseado no menor privilégio (RBAC), garanta auditabilidade forense imutável e forneça telemetria padronizada, sem exigir alterações no código-fonte dos clientes e servidores existentes, garantindo latência insignificante para sistemas em produção?}
-\end{quote}
 
 % -----------------------------------------------------------------------------
 % HIPÓTESE DE INVESTIGAÇÃO
 % -----------------------------------------------------------------------------
-\section{Hipótese de Investigação}
+\section{Hipótese}
 \label{sec:hipotese}
 
-A hipótese científica de trabalho adotada nesta pesquisa afirma que:
+A hipótese científica adotada nesta pesquisa é estabelecida por meio de afirmações declarativas, dividindo-se em uma hipótese geral e quatro hipóteses específicas correspondentes.
 
-\begin{quote}
-  \textbf{Hipótese de Trabalho:} \textit{A introdução de uma camada intermediária de governança não invasiva no canal de comunicação JSON-RPC do MCP --- operada por um mecanismo determinístico de Controle de Acesso Baseado em Papéis (RBAC) com divisão clara entre operações de leitura e mutação, combinada com uma trilha de auditoria forense criptografada e um módulo de telemetria compatível com OpenTelemetry --- é capaz de interceptar e bloquear com eficácia vetores de ataque adversariais (como Tool Poisoning, Rug Pull e Broken Access Control) com uma sobrecarga de latência imperceptível ($< 1,0$ ms por chamada), induzindo ao mesmo tempo o efeito de Moldagem Comportamental, que torna as decisões e o planejamento do próprio agente de IA mais seguros.}
-\end{quote}
+\subsection{Hipótese Geral}
+\label{subsec:hipotese_geral}
+A introdução de uma camada intermediária de governança não invasiva no canal de comunicação do ecossistema MCP é capaz de mitigar de forma eficaz vetores de ataque adversariais, provendo controle de acesso, auditoria forense e telemetria sem comprometer a latência e a compatibilidade do sistema hospedeiro.
+
+\subsection{Hipóteses Específicas}
+\label{subsec:hipoteses_especificas}
+\begin{enumerate}
+  \item A sistematização formal das vulnerabilidades do ecossistema MCP viabiliza a reprodução controlada de vetores de ataque representativos, como a elevação indevida de privilégios e o envenenamento de ferramentas;
+  \item O uso de uma arquitetura de interceptação transparente permite a mediação contínua das mensagens do protocolo sem exigir alterações no código-fonte de clientes e servidores legados;
+  \item A aplicação combinada de controle RBAC, trilhas de auditoria protegidas por encadeamento criptográfico e telemetria padronizada estabelece uma governança determinística e rastreável sobre as ações do agente;
+  \item A atuação dessa camada em tempo de execução bloqueia ações não autorizadas com sobrecarga de latência imperceptível (inferior a 1,0 ms por chamada), induzindo simultaneamente a moldagem comportamental no planejamento do agente.
+\end{enumerate}
 
 % -----------------------------------------------------------------------------
 % OBJETIVOS DA PESQUISA
@@ -91,31 +77,26 @@ A hipótese científica de trabalho adotada nesta pesquisa afirma que:
 \subsection{Objetivo Geral}
 \label{subsec:obj_geral}
 
-O objetivo geral deste trabalho consiste em \textbf{projetar, implementar e validar experimentalmente uma camada de governança, auditoria forense e observabilidade em tempo de execução (\textit{Governance Gateway}) para ecossistemas baseados no Model Context Protocol (MCP)}, mitigando as vulnerabilidades causadas pela confiança implícita do protocolo por meio de políticas de menor privilégio (RBAC), registro criptograficamente protegido de requisições e telemetria operacional em tempo real.
+O objetivo geral deste trabalho consiste em \textbf{projetar, implementar e validar experimentalmente uma camada de governança, auditoria forense e observabilidade em tempo de execução (\textit{Governance Gateway}) para ecossistemas baseados no protocolo MCP}, mitigando as vulnerabilidades decorrentes da confiança implícita do protocolo por meio de políticas de menor privilégio (RBAC), registro criptograficamente íntegro de requisições e telemetria operacional em tempo real.
 
 \subsection{Objetivos Específicos}
 \label{subsec:obj_especificos}
 
-Para atingir o objetivo geral, foram definidos os seguintes objetivos específicos:
+Para atingir o objetivo geral e validar as hipóteses formuladas, definem-se os seguintes objetivos específicos:
 
 \begin{enumerate}
-  \item \textbf{Mapear e Formalizar o Modelo de Ameaças do Ecossistema MCP:} Consolidar os principais vetores de vulnerabilidade identificados na literatura recente \cite{hasan2026mcp,hou2025mcp,jang2026hierarchical,buhler2026agentbound} em uma suíte de testes controlada, reproduzindo cenários de ataque como elevação indevida de privilégios, injeção indireta de prompt, envenenamento de esquemas de ferramentas (\textit{Tool Poisoning}) e execução de comandos prejudiciais;
+  \item \textbf{Mapear e formalizar o modelo de ameaças do ecossistema MCP:} Consolidar os principais vetores de vulnerabilidade da literatura recente \cite{hasan2026mcp,hou2025mcp,jang2026hierarchical,buhler2026agentbound} em uma suíte controlada de testes adversariais;
 
-  \item \textbf{Projetar a Arquitetura do \textit{Governance Gateway}:} Especificar e desenvolver uma estrutura de mediação transparente baseada em proxy/sidecar, capaz de interceptar mensagens JSON-RPC 2.0 (como chamadas de ferramentas, listagem de recursos e leitura de dados) tanto em canais locais (\textit{pipes stdio}) quanto em conexões remotas (\textit{Streamable HTTP}), sem exigir qualquer alteração no código dos clientes ou dos servidores MCP existentes;
+  \item \textbf{Projetar a arquitetura do gateway de governança:} Especificar e desenvolver uma estrutura de mediação transparente baseada em proxy capaz de interceptar o tráfego local e remoto do protocolo sem exigir alterações nos clientes ou servidores existentes;
 
-  \item \textbf{Implementar os Três Pilares Funcionais de Segurança:}
+  \item \textbf{Implementar os três pilares funcionais de segurança:}
     \begin{itemize}
-      \item \textbf{Pilar I - Controle de Acesso Baseado em Papéis em Tempo de Execução (RBAC):} Desenvolver um motor determinístico de regras que classifique as ferramentas em perfis de acesso, separando de forma clara operações de consulta de ações com poder de alteração, além de permitir elevações temporárias de privilégio supervisionadas por aprovação humana (\textit{Human-in-the-Loop}) \cite{singh2026mcpsecure,zhang2025acfix};
-      \item \textbf{Pilar II - Trilha de Auditoria Forense Criptográfica:} Criar um mecanismo de armazenamento em formato estruturado (JSON Lines) com encadeamento de hashes SHA-256 no padrão à prova de adulteração (\textit{tamper-evident}), registrando data e hora com alta precisão, identidade do agente, contexto da requisição, parâmetros e resultado da execução, assegurando a integridade e o não-repúdio das informações;
-      \item \textbf{Pilar III - Observabilidade e Telemetria em Tempo Real:} Integrar a coleta de métricas e rastreamento distribuído no padrão OpenTelemetry e W3C Trace Context, disponibilizando indicadores de tempo de resposta, vazão e tentativas de chamadas bloqueadas em um painel visual para monitoramento contínuo;
+      \item \textbf{Pilar I - Controle de Acesso Baseado em Papéis (RBAC):} Desenvolver um motor determinístico de regras que classifique ferramentas por perfil de acesso e efeito operacional, separando consultas de mutações e suportando elevação temporária sob supervisão humana \cite{singh2026mcpsecure,zhang2025acfix};
+      \item \textbf{Pilar II - Trilha de Auditoria Forense Imutável:} Implementar o registro estruturado de eventos com encadeamento criptográfico de resumos SHA-256 à prova de adulteração, assegurando integridade e não-repúdio;
+      \item \textbf{Pilar III - Observabilidade e Telemetria em Tempo Real:} Integrar a coleta e exportação de métricas e rastreamentos distribuídos no padrão OpenTelemetry para monitoramento contínuo em painel visual;
     \end{itemize}
 
-  \item \textbf{Realizar Avaliação Experimental e Medição de Desempenho:} Submeter a solução desenvolvida a ensaios práticos em ambiente controlado para:
-    \begin{itemize}
-      \item Medir a taxa de bloqueio e mitigação de ataques frente a sistemas sem proteção;
-      \item Avaliar o impacto da camada intermediária no tempo de resposta (medindo o acréscimo de latência em milissegundos) e no consumo de memória e processamento;
-      \item Analisar empiricamente se a presença do controle em tempo de execução induz o efeito de Moldagem Comportamental (\textit{Behavioral Shaping}) nas decisões tomadas pelos agentes avaliados.
-    \end{itemize}
+  \item \textbf{Realizar avaliação experimental e medição de desempenho:} Submeter o protótipo a ensaios controlados para medir a taxa de bloqueio de ataques frente a sistemas desprotegidos, quantificar o acréscimo de latência e consumo de recursos, e verificar a ocorrência de moldagem comportamental nos agentes.
 \end{enumerate}
 
 % -----------------------------------------------------------------------------
@@ -124,47 +105,30 @@ Para atingir o objetivo geral, foram definidos os seguintes objetivos específic
 \section{Justificativa}
 \label{sec:justificativa}
 
-A realização desta pesquisa justifica-se pela convergência de três fatores essenciais:
-relevância técnica, contribuição acadêmica e impacto prático no setor produtivo.
+A realização desta pesquisa justifica-se por sua relevância técnica, acadêmica e prática. Do ponto de vista \textbf{técnico}, a mediação transparente no barramento do protocolo preserva total compatibilidade com clientes e servidores de terceiros, enquanto o uso de regras determinísticas de RBAC retira a decisão de segurança do modelo probabilístico \cite{zhang2025acfix}, preenchendo a lacuna semântica apontada na literatura \cite{buhler2026agentbound}.
 
-Do ponto de vista \textbf{técnico}, a proposta de interpor uma camada de governança
-transparente no barramento JSON-RPC soluciona o problema da segurança sem impor barreiras
-à adoção do protocolo. Ao adotar uma arquitetura de mediação não invasiva, a solução
-preserva a compatibilidade total com ecossistemas legados, evitando a necessidade de
-reescrever clientes ou servidores de terceiros. Além disso, ao utilizar um motor
-determinístico de regras de acesso (RBAC), a validação de segurança é retirada da própria LLM,
-cuja natureza probabilística comprovadamente falha em garantir controles rígidos
-\cite{zhang2025acfix}, eliminando a lacuna semântica identificada por Bühler et al.
-\cite{buhler2026agentbound}.
+Sob a perspectiva \textbf{científica e acadêmica}, os estudos sobre o protocolo MCP são recentes (2025--2026) e concentram-se majoritariamente no diagnóstico de vulnerabilidades \cite{hasan2026mcp,guo2025measurement,hou2025mcp}. Este trabalho contribui ao integrar controle de acesso em tempo de execução, auditoria forense criptográfica e observabilidade distribuída em um artefato funcional validado experimentalmente.
 
-Sob a perspectiva \textbf{científica e acadêmica}, a literatura especializada sobre a segurança do Model Context Protocol ainda é muito recente, concentrada principalmente em publicações entre 2025 e 2026. A maioria dos estudos existentes foca no diagnóstico de vulnerabilidades e em levantamentos de riscos \cite{hasan2026mcp,guo2025measurement,hou2025mcp}, havendo uma carência de trabalhos que apresentem artefatos funcionais e avaliações práticas de mitigação em tempo de execução. Esta pesquisa contribui diretamente para preencher essa lacuna ao unir princípios fundamentais da segurança da informação, como o Princípio do Menor Privilégio e os modelos de RBAC , aos desafios emergentes da autonomia de agentes de inteligência artificial.
-
-Por fim, no aspecto \textbf{prático e aplicado}, a viabilidade da utilização de agentes de IA em ambientes corporativos depende criticamente da capacidade de garantir proteção a dados sensíveis e conformidade com normas regulatórias (como LGPD e GDPR). Incidentes de segurança decorrentes de agentes autônomos sem supervisão podem ocasionar perdas financeiras expressivas, vazamento de propriedade intelectual e danos à imagem institucional das empresas. Ao fornecer uma trilha de auditoria forense criptograficamente protegida contra alterações e um painel de observabilidade em tempo real compatível com o OpenTelemetry, este trabalho entrega um sistema funcional que permite às organizações implementar agentes MCP em produção com segurança e confiabilidade.
+No aspecto \textbf{prático}, a adoção corporativa de agentes autônomos exige proteção a dados críticos e conformidade com normas regulatórias (como LGPD e GDPR). A entrega de uma trilha de auditoria inviolável aliada à telemetria em tempo real oferece às organizações a confiabilidade necessária para operar agentes MCP em produção.
 
 % -----------------------------------------------------------------------------
 % METODOLOGIA E MÉTODO DE INVESTIGAÇÃO
 % -----------------------------------------------------------------------------
-\section{Metodologia e Método de Investigação}
+\section{Método}
 \label{sec:metodologia}
 
-Para conduzir a concepção, o desenvolvimento e a validação do artefato proposto, este trabalho adota como referencial metodológico o paradigma da \textit{Design Science Research} (DSR), formalizado por Hevner et al. A DSR é um método amplamente reconhecido nas áreas de Ciência da Computação e Engenharia de Software, voltado à criação e à avaliação rigorosa de artefatos computacionais projetados para resolver problemas práticos relevantes.
-
-O método de investigação organiza-se em cinco fases iterativas:
+Este trabalho adota como referencial metodológico a \textit{Design Science Research} (DSR), voltada à construção e avaliação rigorosa de artefatos computacionais para solucionar problemas práticos relevantes. O método estrutura-se em cinco fases iterativas:
 
 \begin{enumerate}
-  \item \textbf{Fase 1 - Identificação do Problema e Revisão Bibliográfica:} Levantamento aprofundado do estado da arte sobre segurança no protocolo MCP, analisando estudos de medição do ecossistema \cite{hasan2026mcp,guo2025measurement}, classificações de ameaças emergentes \cite{hou2025mcp,jang2026hierarchical}, propostas de isolamento no sistema operacional \cite{buhler2026agentbound}, mecanismos de controle em tempo de execução \cite{singh2026mcpsecure} e aplicações de RBAC em sistemas inteligentes \cite{zhang2025acfix}. O resultado desta etapa é a definição formal do modelo de ameaças a ser mitigado;
+  \item \textbf{Fase 1 - Identificação do Problema e Revisão Bibliográfica:} Levantamento do estado da arte sobre segurança, medição e controle de acesso no protocolo MCP \cite{hasan2026mcp,guo2025measurement,hou2025mcp,jang2026hierarchical,buhler2026agentbound,singh2026mcpsecure,zhang2025acfix}, resultando na formalização do modelo de ameaças;
 
-  \item \textbf{Fase 2 - Concepção Arquitetural e Modelagem Teórica:} Projeto da arquitetura do \textit{Governance Gateway} como um intermediador transparente no nível de transporte JSON-RPC. Nesta fase, define-se a máquina de estados para controle de privilégios, a matriz de regras e permissões de ferramentas (RBAC), a estrutura de encadeamento criptográfico para os registros de auditoria e o esquema de telemetria alinhado às recomendações do OpenTelemetry e da especificação oficial da Anthropic \cite{soriaparra2026mcp};
+  \item \textbf{Fase 2 - Concepção Arquitetural e Modelagem Teórica:} Especificação do gateway de governança, definindo a máquina de estados de sessão, a matriz RBAC, a estrutura de encadeamento criptográfico de logs e o esquema de telemetria compatível com OpenTelemetry \cite{singh2026mcpsecure,jang2026hierarchical};
 
-  \item \textbf{Fase 3 - Engenharia e Implementação do Protótipo:} Construção do artefato funcional utilizando linguagem de alta eficiência e com execução nativa em máquinas virtuais (JAVA/Elixir). O desenvolvimento é dividido em três módulos principais: (i) Módulo de Interceptação com motor de políticas RBAC; (ii) Módulo de Auditoria Forense com encadeamento de hashes SHA-256 e gravação segura;   (iii) Módulo de Telemetria com exportação de dados para painéis de observabilidade;
+  \item \textbf{Fase 3 - Engenharia e Implementação do Protótipo:} Construção do artefato funcional em linguagem de alta eficiência e execução em máquinas virtuais (JAVA/Elixir), integrando os módulos de interceptação RBAC, auditoria forense SHA-256 e exportação de telemetria;
 
-  \item \textbf{Fase 4 - Avaliação Experimental e Coleta de Métricas:} Realização de testes práticos em bancada controlada sob duas perspectivas:
-    \begin{itemize}
-      \item \textit{Eficácia de Segurança:} Execução de cenários adversariais reproduzíveis contendo tentativas de elevação indevida de privilégios, injeção de instruções e chamadas maliciosas de ferramentas, comparando os resultados do gateway com uma execução padrão desprotegida;
-      \item \textit{Desempenho e Sobrecarga:} Medição do tempo de resposta das chamadas (latência de ida e volta), do impacto temporal introduzido pela camada intermediária e do consumo de memória e processamento;
-    \end{itemize}
+  \item \textbf{Fase 4 - Avaliação Experimental e Coleta de Métricas:} Execução de testes em bancada controlada para aferir a eficácia de segurança (taxa de bloqueio contra cenários adversariais frente ao cenário base desprotegido) e a sobrecarga de desempenho (latência adicionada e uso de CPU/memória);
 
-  \item \textbf{Fase 5 - Análise dos Resultados e Conclusão:} Tratamento quantitativo dos dados experimentais obtidos, comparação com métricas descritas na literatura de referência \cite{singh2026mcpsecure,buhler2026agentbound}, consolidação das conclusões obtidas e redação final da monografia.
+  \item \textbf{Fase 5 - Análise dos Resultados e Conclusão:} Tratamento quantitativo dos dados obtidos, comparação com as métricas da literatura de referência \cite{singh2026mcpsecure,buhler2026agentbound} e consolidação das conclusões da monografia.
 \end{enumerate}
 
 % -----------------------------------------------------------------------------
@@ -173,18 +137,12 @@ O método de investigação organiza-se em cinco fases iterativas:
 \section{Organização}
 \label{sec:estrutura}
 
-Para apresentar o desenvolvimento da pesquisa e os resultados de forma clara e estruturada, esta monografia divide-se em seis capítulos:
-
+Esta monografia divide-se em seis capítulos:
 \begin{itemize}
-  \item \textbf{Capítulo 1 - Introdução:} Apresenta o contexto do trabalho, a motivação, a problemática investigada, a hipótese de trabalho, os objetivos geral e específicos, a justificativa da pesquisa, a metodologia adotada e a organização do documento;
-
-  \item \textbf{Capítulo 2 - Fundamentação Teórica e Trabalhos Relacionados:} Apresenta os conceitos fundamentais sobre a arquitetura do Model Context Protocol, as ameaças de segurança mapeadas na literatura, os princípios do Controle de Acesso Baseado em Papéis (RBAC), as técnicas de auditoria forense com encadeamento criptográfico e os padrões de observabilidade com OpenTelemetry, revisando criticamente as principais pesquisas relacionadas;
-
-  \item \textbf{Capítulo 3 - Arquitetura e Engenharia do \textit{Governance Gateway}:} Detalha o projeto e a implementação técnica da solução desenvolvida, descrevendo a estrutura de interceptação no barramento JSON-RPC, o motor de regras de menor privilégio (Pilar I), o sistema de auditoria forense à prova de adulteração (Pilar II) e o módulo de telemetria em tempo real (Pilar III);
-
-  \item \textbf{Capítulo 4 - Metodologia e Avaliação Experimental:} Descreve o ambiente de testes, a suíte de cenários adversariais criada para a avaliação, o protocolo de testes de desempenho e os critérios de medição utilizados;
-
-  \item \textbf{Capítulo 5 - Resultados Experimentais e Discussão:} Apresenta e discute os dados obtidos nos ensaios práticos, analisando a eficácia do bloqueio de ameaças, o impacto na latência do sistema, a viabilidade de uso em produção e a observação de moldagem comportamental nos agentes;
-
-  \item \textbf{Capítulo 6 - Considerações Finais:} Resume as principais conclusões alcançadas, discute as contribuições e limitações do trabalho e sugere direções para pesquisas futuras na área de segurança de agentes inteligentes.
+  \item \textbf{Capítulo 1 - Introdução:} Contextualiza o tema e apresenta a motivação, a problemática declarativa, as hipóteses, os objetivos, a justificativa, a metodologia e a estrutura do trabalho;
+  \item \textbf{Capítulo 2 - Fundamentação Teórica:} Detalha a especificação arquitetural do MCP, a modelagem de ameaças, os modelos de RBAC e menor privilégio, a auditoria forense criptográfica, a observabilidade com OpenTelemetry e a revisão crítica dos trabalhos relacionados;
+  \item \textbf{Capítulo 3 - Modelo Conceitual do Artefato:} Apresenta o modelo conceitual do \textit{Governance Gateway}, detalhando seus quatro módulos, fluxos de processos, vínculos de dependência e o mapeamento direto com os artigos inspiradores da literatura;
+  \item \textbf{Capítulo 4 - Metodologia e Avaliação Experimental:} Apresenta o ambiente de testes, os cenários adversariais e o protocolo de medição;
+  \item \textbf{Capítulo 5 - Resultados Experimentais e Discussão:} Analisa os resultados de eficácia de bloqueio, impacto de latência e moldagem comportamental;
+  \item \textbf{Capítulo 6 - Considerações Finais:} Sintetiza as contribuições do estudo, suas limitações e as direções para trabalhos futuros.
 \end{itemize}

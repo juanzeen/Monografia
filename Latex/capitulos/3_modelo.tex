@@ -1,0 +1,306 @@
+\chapter{Modelo Conceitual do Artefato}
+\label{cap:modelo_conceitual}
+
+Este capítulo apresenta o modelo conceitual do artefato proposto nesta monografia, denominado \textit{Governance Gateway}, concebido para solucionar o problema geral formulado na Seção~\ref{sec:problematica} e demonstrar a hipótese geral estabelecida na Seção~\ref{sec:hipotese}. Enquanto o Capítulo~\ref{cap:fundamentacao} fundamentou a base teórica e analisou o estado da arte \cite{hasan2026mcp,singh2026mcpsecure,guo2025measurement,hou2025mcp,jang2026hierarchical,buhler2026agentbound,zhang2025acfix}, o presente capítulo especifica os elementos arquiteturais, os módulos de processamento, as estruturas de dados e os vínculos de dependência que constituem a solução projetada.
+
+No contexto do problema geral abordado, ecossistemas baseados no \textit{Model Context Protocol} (MCP) operam sob um modelo de confiança implícita no qual o agente autônomo no \textit{host} interage diretamente com servidores de ferramentas locais ou remotos sem mediação determinística em \textit{runtime} \cite{buhler2026agentbound,singh2026mcpsecure}. Essa ausência de fronteira de governança expõe o ambiente a ataques de \textit{Tool Poisoning}, injeção indireta de instruções, deriva de privilégios em fluxos multi-etapas e adulteração de históricos operacionais \cite{hasan2026mcp,hou2025mcp,jang2026hierarchical}. Para solucionar esse problema sem exigir modificações no código-fonte dos clientes ou dos servidores MCP legados, o modelo conceitual posiciona o \textit{Governance Gateway} como uma camada intermediária transparente de interceptação (\textit{proxy}) no barramento JSON-RPC 2.0.
+
+A arquitetura geral organiza-se em quatro módulos funcionais interdependentes, nos quais a saída processada por um segmento alimenta a decisão ou a persistência dos módulos seguintes, respondendo diretamente aos subproblemas e hipóteses específicas da pesquisa:
+\begin{enumerate}
+  \item \textbf{Módulo de Interceptação e Roteamento de Sessão:} Atua na fronteira entre o \textit{MCP Client} e o \textit{MCP Server}, capturando o tráfego bruto nos canais \textit{stdio} e \textit{Streamable HTTP}, decodificando os quadros JSON-RPC 2.0 para extrair o contexto estruturado da chamada e impondo a filtragem de catálogos e o bloqueio de pacotes não autorizados;
+  \item \textbf{Módulo de Governança Determinística, RBAC e Máquina de Estados de Sessão:} Recebe o contexto normalizado da chamada e atua como Ponto de Decisão de Política (PDP), combinando uma matriz formal de RBAC \cite{zhang2025acfix} com uma máquina de estados de sessão em quatro níveis (L0 a L3) \cite{singh2026mcpsecure} e elevação supervisionada (HITL) para emitir um veredito determinístico;
+  \item \textbf{Módulo de Auditoria Forense Imutável e Verificação Criptográfica:} Consome os metadados da requisição e o veredito do PDP para construir registros estruturados em formato \textit{JSON Lines} encadeados recursivamente via SHA-256 \cite{jang2026hierarchical}, assegurando integridade fim a fim, rastreabilidade causal e não-repúdio;
+  \item \textbf{Módulo de Observabilidade Distribuída e Telemetria em \textit{Runtime}:} Opera transversalmente extraindo e injetando cabeçalhos \textit{W3C Trace Context} no campo reservado \texttt{\_meta}, cronometrando os estágios internos em microssegundos, correlacionando identificadores de \textit{trace} com os registros SHA-256 e exportando telemetria no padrão OpenTelemetry.
+\end{enumerate}
+
+A Figura~\ref{fig:arquitetura_geral_gateway} apresenta o diagrama da arquitetura conceitual geral do \textit{Governance Gateway}, ilustrando a disposição dos quatro módulos e seus vínculos. Por fim, a Seção~\ref{sec:integracao_bengala} consolida a integração fim a fim desses processos e explicita o mapeamento com os artigos científicos inspiradores revisados no Capítulo~\ref{cap:fundamentacao}.
+
+\begin{figure}[H]
+  \centering
+  \caption{Arquitetura Conceitual Geral do \textit{Governance Gateway} e Vínculos de Dependência entre Módulos.}
+  \vspace{0.1cm}
+  \includegraphics[scale=0.28]{GovernanceGateway.png}
+  \label{fig:arquitetura_geral_gateway}
+  \caption*{Fonte: Elaborado pelo autor (2026).}
+\end{figure}
+
+% =============================================================================
+% 3.1 MÓDULO DE INTERCEPTAÇÃO TRANSPARENTE E ROTEAMENTO DE SESSÃO
+% =============================================================================
+\section{Módulo de Interceptação e Roteamento de Sessão}
+\label{sec:modulo_interceptacao}
+
+O primeiro requisito para aplicar governança no ecossistema MCP é interceptar a comunicação entre o agente e as ferramentas sem precisar alterar o código-fonte do \textit{host} ou dos servidores comunitários \cite{hasan2026mcp,guo2025measurement}. O Módulo de Interceptação Transparente e Roteamento de Sessão cumpre esse papel funcionando como o Ponto de Imposição de Política (PEP) do gateway \cite{singh2026mcpsecure}.
+
+Na prática, este módulo posiciona-se como um \textit{proxy} intermediário: ele recebe as mensagens enviadas nos canais de transporte, extrai os dados principais da requisição JSON-RPC 2.0, consulta o Módulo de Governança (Seção~\ref{sec:modulo_rbac_estados}) e aplica a decisão retornada (encaminhar, filtrar ou bloquear). Sua operação divide-se em três submódulos: Adaptação dos Canais de Transporte (Subseção~\ref{subsec:adaptacao_transporte}), Decodificação e Extração de Contexto JSON-RPC (Subseção~\ref{subsec:normalizador_jsonrpc}) e Filtragem de Catálogo e Imposição de Política (Subseção~\ref{subsec:pep_filtragem}), conforme ilustrado na Figura~\ref{fig:fluxo_interceptacao_pep}.
+
+\begin{figure}[H]
+  \centering
+  \caption{Fluxograma do Módulo de Interceptação e Imposição de Política (PEP).}
+  \vspace{0.1cm}
+  \includegraphics[scale=.6]{fluxograma31.png}
+  \label{fig:fluxo_interceptacao_pep}
+  \caption*{Fonte: Elaborado pelo autor (2026).}
+\end{figure}
+
+\subsection{Submódulo de Adaptação dos Canais de Transporte}
+\label{subsec:adaptacao_transporte}
+
+Conforme demonstrado por Guo et al. \cite{guo2025measurement}, 99,4\% dos servidores MCP operam localmente via entrada e saída padrão (\textit{stdio}), enquanto servidores remotos utilizam \textit{Streamable HTTP}. Para suportar ambos os cenários sem modificar os sistemas existentes, este submódulo opera em dois modos transparentes:
+\begin{itemize}
+  \item \textbf{Interceptação Local (\textit{stdio}):} No arquivo de configuração do \textit{host} (como \path{claude_desktop_config.json}), o comando de inicialização do servidor é substituído pelo executável do gateway, que recebe o comando original (\texttt{npx}, \texttt{uvx} ou \texttt{python}) como argumento \cite{hou2025mcp,buhler2026agentbound}. O gateway inicia o servidor real como um subprocesso filho e redireciona seus fluxos \texttt{stdin} e \texttt{stdout}, inspecionando todas as mensagens trocadas;
+  \item \textbf{Interceptação Remota (\textit{Streamable HTTP}):} Para servidores em rede, o submódulo atua como um \textit{reverse proxy} HTTP que recebe as requisições do cliente, preserva o cabeçalho de sessão (\path{Mcp-Session-Id}) e repassa ao servidor remoto apenas as chamadas autorizadas \cite{singh2026mcpsecure}.
+\end{itemize}
+
+\subsection{Submódulo de Decodificação e Extração de Contexto JSON-RPC}
+\label{subsec:normalizador_jsonrpc}
+
+Uma vez capturada a mensagem no canal de transporte, este submódulo valida a estrutura JSON-RPC 2.0 e monta em memória o \textbf{Contexto de Interceptação} ($\mathcal{C}_{\text{req}}$) que será enviado aos demais módulos. Esse processo resume-se à extração de três informações principais:
+\begin{enumerate}
+  \item \textbf{Operação e Alvo:} Identifica o método invocado (\path{initialize}, \path{tools/list}, \path{tools/call} ou \path{resources/read}), o nome da ferramenta ou recurso (\path{params.name} ou \path{params.uri}) e seus argumentos (\path{params.arguments});
+  \item \textbf{Metadados de Rastreamento (\texttt{\_meta}):} Separa o campo reservado \path{params._meta} dos argumentos da ferramenta, extraindo o cabeçalho \path{traceparent} utilizado pelo Módulo de Observabilidade (Seção~\ref{sec:modulo_observabilidade});
+  \item \textbf{Vínculo de Sessão e Tempo:} Associa a mensagem ao identificador da sessão ativa ($s \in S$) e registra o instante exato de chegada ($t_{\text{in}}$) para medição da latência interna do gateway.
+\end{enumerate}
+
+\subsection{Submódulo de Filtragem de Catálogo e Imposição de Política (PEP)}
+\label{subsec:pep_filtragem}
+
+O terceiro submódulo executa de fato a filtragem e o controle sobre o tráfego \cite{singh2026mcpsecure,hasan2026mcp}. Quando o servidor responde a uma consulta de descoberta (\path{tools/list}), o PEP realiza a \textbf{filtragem de escopo}, ocultando ferramentas que não pertencem ao papel do agente e a \textbf{higienização de descrições}, removendo instruções maliciosas ocultas nos campos \texttt{description} (\textit{Tool Poisoning}) \cite{hasan2026mcp,hou2025mcp} antes que cheguem ao modelo de linguagem.
+
+Por sua vez, quando o cliente envia uma chamada de execução (\path{tools/call} ou \path{resources/read}), o PEP consulta o Módulo~\ref{sec:modulo_rbac_estados} (PDP) e aplica uma das quatro ações possíveis:
+\begin{itemize}
+  \item \textbf{\texttt{ALLOW}:} Encaminha a requisição normalmente ao servidor MCP;
+  \item \textbf{\texttt{DENY}:} Bloqueia a chamada e retorna imediatamente ao cliente um erro JSON-RPC padronizado de violação de política;
+  \item \textbf{\texttt{DOWNGRADE}:} Substitui uma operação de escrita não essencial por uma resposta simulada segura (\textit{dry-run}), evitando alterações no ambiente externo \cite{singh2026mcpsecure};
+  \item \textbf{\texttt{HITL\_PENDING}:} Retém temporariamente a chamada em memória até que o operador humano aprove ou rejeite a operação (Subseção~\ref{subsec:elevacao_hitl}).
+\end{itemize}
+
+% =============================================================================
+% 3.2 MÓDULO DE GOVERNANÇA DETERMINÍSTICA, RBAC E MÁQUINA DE ESTADOS
+% =============================================================================
+\section{Módulo de Governança Determinística, RBAC e Máquina de Estados (PDP)}
+\label{sec:modulo_rbac_estados}
+
+Normalizado o tráfego pelo Módulo~\ref{sec:modulo_interceptacao}, o segundo subproblema consiste em decidir de maneira determinística, com impacto de latência minímo e fora do modelo probabilístico, se uma chamada deve ser autorizada, bloqueada, rebaixada ou submetida a aprovação humana \cite{zhang2025acfix,singh2026mcpsecure}. O Módulo de Governança Determinística, RBAC e Máquina de Estados de Sessão atua como o Ponto de Decisão de Política (PDP) do artefato, fechando a lacuna semântica \cite{buhler2026agentbound} e contendo a deriva de privilégios \cite{singh2026mcpsecure}.
+
+Este módulo recebe o Contexto de Interceptação $\mathcal{C}_{\text{req}}$, avalia seus atributos contra a matriz de políticas declarativas e o estado dinâmico da sessão, e emite o \textbf{Veredito de Governança} ($\mathcal{V}_{\text{pdp}}$) para o PEP, para o Módulo Forense (Seção~\ref{sec:modulo_auditoria_forense}) e para o Módulo de Observabilidade (Seção~\ref{sec:modulo_observabilidade}). Sua estrutura divide-se em três submódulos: Classificação Semântica e Matriz RBAC (Subseção~\ref{subsec:classificacao_matriz_rbac}), Máquina de Estados de Sessão L0--L3 (Subseção~\ref{subsec:maquina_estados_l0_l3}), e Elevação Supervisionada HITL (Subseção~\ref{subsec:elevacao_hitl}), ilustrados na Figura~\ref{fig:maquina_estados_pdp}.
+
+\begin{figure}[H]
+  \centering
+  \caption{ Diagrama de Fluxo de Decisão do Motor RBAC (PDP) e Máquina de Estados de Sessão (L0 - L3).}
+  \vspace{0.1cm}
+  \includegraphics[scale=0.5]{diagrama32.png}
+  \label{fig:maquina_estados_pdp}
+  \caption*{Fonte: Elaborado pelo autor (2026).}
+\end{figure}
+
+\subsection{Submódulo de Classificação de Ferramentas e Matriz RBAC}
+\label{subsec:classificacao_matriz_rbac}
+
+Inspirado nos três perfis de acesso do framework \textit{ACFIX} \cite{zhang2025acfix} e no modelo declarativo do \textit{AgentBound} \cite{buhler2026agentbound}, este submódulo define as regras de permissão em um arquivo de políticas (\path{PolicyManifest}). Nesse manifesto, cada sessão do agente recebe um entre três papéis de acesso (RBAC):
+\begin{itemize}
+  \item \textbf{\texttt{Auditor} (Usuário Restrito):} Limitado apenas a operações de consulta (\texttt{read}) sobre recursos públicos ou diretórios previamente autorizados;
+  \item \textbf{\texttt{Operator} (Operador):} Autorizado a realizar consultas (\texttt{read}) e a executar ferramentas de escrita controlada (\texttt{write}), desde que os argumentos enviados respeitem as regras de validação;
+  \item \textbf{\texttt{Admin} (Administrador):} Papel mais elevado, com permissão para acionar operações críticas ou destrutivas (\texttt{delete}), mas que exige aprovação humana em \textit{runtime} antes da execução.
+\end{itemize}
+
+Para conectar esses papéis às ferramentas dos servidores MCP, o manifesto classifica cada ferramenta cadastrada conforme o impacto de sua operação: \textbf{leitura (\texttt{read})}, quando apenas consulta dados sem alterar o estado do sistema; \textbf{escrita (\texttt{write})}, quando cria ou modifica arquivos e registros; ou \textbf{exclusão/crítica (\texttt{delete})}, quando remove dados ou executa comandos sensíveis. Ao receber uma chamada, o gateway verifica primeiro se o papel da sessão tem permissão para o tipo de operação da ferramenta solicitada.
+
+Entretanto, autorizar apenas o nome da ferramenta não é suficiente: mesmo que um agente com papel \texttt{Operator} tenha permissão para usar uma ferramenta de leitura de arquivos, ele ainda poderia ser induzido por uma injeção de prompt a ler chaves privadas do sistema. Por isso, após validar o papel, este submódulo inspeciona os argumentos (\path{params.arguments}) da chamada \path{tools/call} aplicando quatro regras práticas de validação (\textit{predicados de guarda}):
+\begin{enumerate}
+  \item \textbf{Restrição de Diretórios e Arquivos:} Verifica se os caminhos de arquivos informados pertencem exclusivamente às pastas permitidas, bloqueando tentativas de \textit{Path Traversal} (\texttt{../}) e o acesso a arquivos sensíveis do \textit{host} (como \path{~/.ssh/}, \path{.env} e \path{claude_desktop_config.json}) \cite{hasan2026mcp,buhler2026agentbound};
+  \item \textbf{Restrição de Domínios de Rede:} Permite requisições externas apenas para domínios listados na política do papel e bloqueia conexões para portas internas (\path{localhost}) \cite{jang2026hierarchical,hou2025mcp};
+  \item \textbf{Bloqueio de Injeção de Comandos:} Inspeciona o texto dos argumentos por meio de expressões regulares e rejeita chamadas que contenham caracteres de encadeamento de comandos de terminal (\texttt{;}, \texttt{\&\&}, \texttt{|}, \texttt{`}, \texttt{\$()}) \cite{hasan2026mcp};
+  \item \textbf{Limite de Taxa de Requisições (\textit{Rate Limit}):} Limita a quantidade máxima de chamadas por sessão em um intervalo de tempo, interrompendo loops infinitos do agente ou tentativas de exfiltração de dados em massa.
+\end{enumerate}
+
+\subsection{Submódulo de Máquina de Estados de Sessão (Níveis L0 a L3)}
+\label{subsec:maquina_estados_l0_l3}
+
+Para impedir que sessões com permissão nominal de escrita sofram deriva de privilégios (\textit{Privilege Drift}) após lerem conteúdos externos contaminados, o segundo submódulo mantém uma \textbf{Máquina de Estados Finitos de Segurança} para cada sessão $s$, operando nos quatro níveis progressivos propostos por Singh e Madisetti \cite{singh2026mcpsecure}:
+\begin{itemize}
+  \item \textbf{Nível L0 (\textit{Baseline Aberto}):} Modo diagnóstico sem bloqueios, registrando eventos e telemetria para linha de base experimental;
+  \item \textbf{Nível L1 (\textit{Acesso Escopado}):} Restringe o catálogo em \path{tools/list} exclusivamente ao domínio funcional do papel atribuído à sessão;
+  \item \textbf{Nível L2 (\textit{Padrão Somente-Leitura Estrito}):} Mantém a sessão no estado \path{ScopedReadOnly}, permitindo consultas (\texttt{read}) válidas e convertendo qualquer chamada \texttt{write} ou \texttt{delete} em \texttt{DENY} ou \texttt{DOWNGRADE};
+  \item \textbf{Nível L3 (\textit{HITL}):} Opera por padrão no estado \path{ScopedReadOnly} (idêntico ao L2), mas permite transições temporárias para mutações legítimas sob aprovação humana.
+\end{itemize}
+
+Formalmente, a máquina em nível L3 é definida pela quíntupla $\mathcal{M}_s = (Q, \Sigma, \delta, q_0, F)$ sobre os estados discretos \path{Init}, \path{ScopedReadOnly}, \path{PendingApproval}, \path{ElevatedWindow} e \path{Revoked}, com estado inicial $q_0 = \text{\texttt{ScopedReadOnly}}$. Essa contenção induz diretamente a \textbf{Moldagem Comportamental} (\textit{Behavioral Shaping}): ao receber recusas determinísticas quando tenta sair de \path{ScopedReadOnly} sem autorização, o modelo reajusta seu ciclo interno para concluir a tarefa com operações seguras \cite{singh2026mcpsecure}.
+
+\subsection{Submódulo de Elevação Supervisionada com Janela Temporal (\textit{HITL})}
+\label{subsec:elevacao_hitl}
+
+Quando uma sessão em Nível L3 encontra-se em \path{ScopedReadOnly} e o agente emite uma chamada \path{tools/call} de escrita ou exclusão (\texttt{write} ou \texttt{delete}) que já foi aprovada pelas regras de papel e validação de argumentos da Subseção~\ref{subsec:classificacao_matriz_rbac}, este submódulo executa três passos \cite{singh2026mcpsecure,hou2025mcp}:
+\begin{enumerate}
+  \item \textbf{Suspensão em \path{PendingApproval}:} Emite o veredito \path{HITL_PENDING} ao PEP para reter o pacote JSON-RPC na fila de memória sem encerrar a conexão do cliente;
+  \item \textbf{Desafio Fora de Banda:} Envia o contexto completo da chamada (ferramenta, argumentos e nível de risco) a um canal de supervisão humana isolado do contexto do LLM;
+  \item \textbf{Janela Temporal (\path{ElevatedWindow}) e Reversão Automática:} Caso o supervisor rejeite a solicitação ou o tempo de espera expire, devolve \texttt{DENY} ao agente; caso aprove, transita a sessão para \path{ElevatedWindow} durante intervalo estrito pré definido ou execução única, libera a chamada e reverte imediatamente a sessão ao estado seguro \path{ScopedReadOnly}.
+\end{enumerate}
+
+% =============================================================================
+% 3.3 MÓDULO DE AUDITORIA FORENSE IMUTÁVEL E VERIFICAÇÃO CRIPTOGRÁFICA
+% =============================================================================
+\section{Módulo de Auditoria Forense Imutável e Verificação Criptográfica}
+\label{sec:modulo_auditoria_forense}
+
+O bloqueio preventivo em \textit{runtime} precisa ser complementado por perícia pós-incidente e comprovação matemática de integridade do histórico operacional \cite{hou2025mcp,jang2026hierarchical}. Como os logs nativos de servidores MCP são voláteis e vulneráveis à exclusão em caso de comprometimento, o Módulo de Auditoria Forense Imutável e Verificação Criptográfica recebe o contexto da requisição do Módulo~\ref{sec:modulo_interceptacao} e o Veredito de Governança do Módulo~\ref{sec:modulo_rbac_estados}, processando-os em três submódulos: Serialização Canônica JSONL (Subseção~\ref{subsec:serializacao_jsonl}), Encadeamento Criptográfico SHA-256 (Subseção~\ref{subsec:encadeamento_sha256}), e Verificação de Integridade e Reconstrução Causal (Subseção~\ref{subsec:verificador_forense}).
+
+\begin{figure}[H]
+  \centering
+  \caption{Arquitetura do Módulo de Auditoria Forense e Encadeamento Criptográfico SHA-256.}
+  \includegraphics[scale=.45]{diagrama33.png}
+  \label{fig:pipeline_hash_chaining}
+  \caption*{Fonte: Elaborado pelo autor (2026).}
+\end{figure}
+
+\subsection{Submódulo de Serialização Canônica e Registro Estruturado (JSONL)}
+\label{subsec:serializacao_jsonl}
+
+Para que o resumo criptográfico seja determinístico e reprodutível sem ambiguidades de formatação, o Submódulo de Serialização Canônica estrutura cada evento interceptado $i$ como um documento JSON de linha única (\textit{JSON Lines} - JSONL) com dez campos ordenados lexicograficamente:
+\begin{enumerate}
+  \item \path{seq_id} ($i$): Contador inteiro estritamente monotônico iniciado em $1$ na abertura da trilha;
+  \item \path{timestamp_utc} ($T_i$): Carimbo de tempo em padrão ISO 8601 UTC com resolução de microssegundos;
+  \item \path{session_trace_id} ($ID_i$): Tupla combinando o identificador da sessão MCP e o \path{trace_id} do OpenTelemetry;
+  \item \path{rbac_context} ($R_i$): Objeto contendo o papel ativo $r \in R$ e o nível de segurança (L0--L3);
+  \item \path{mcp_operation} ($M_i$): Método invocado (\path{tools/call}, \path{resources/read} ou \path{tools/list}), primitiva alvo e efeito (\texttt{read}, \texttt{write} ou \texttt{delete});
+  \item \path{params_digest} ($P_i$): Argumentos normalizados da chamada com mascaramento de segredos via SHA-256 \cite{hasan2026mcp,hou2025mcp};
+  \item \path{policy_verdict} ($D_i$): Decisão emitida pelo PDP (\texttt{ALLOW}, \texttt{DENY}, \texttt{DOWNGRADE} ou \texttt{HITL});
+  \item \path{execution_metrics} ($S_i$): Código de status da resposta e latência interna do gateway em microssegundos ($\Delta t_{\text{gw}}$);
+  \item \path{prev_hash} ($H_{i-1}$): Resumo hexadecimal SHA-256 de 64 caracteres do evento imediatamente anterior ($i-1$);
+  \item \path{curr_hash} ($H_i$): Resumo hexadecimal SHA-256 de 64 caracteres calculado sobre a concatenação canônica dos nove campos anteriores.
+\end{enumerate}
+
+\subsection{Submódulo de Encadeamento Criptográfico Recursivo (SHA-256)}
+\label{subsec:encadeamento_sha256}
+
+Evoluindo a verificação estática de integridade por SHA-256 do \textit{MCP Firewall} de Jang e Lee \cite{jang2026hierarchical} para um fluxo contínuo em \textit{runtime}, este submódulo mantém em memória protegida um acumulador atômico que armazena o último resumo gerado ($H_{\text{last}}$) e o contador sequencial ($i$), inicializado com o bloco gênese $H_0 = 0^{256}$ (64 dígitos zeros hexadecimais). Para assegurar consistência estrita sob múltiplas sessões concorrentes no mesmo \textit{host}, o cálculo de $H_i$ (Equação~\ref{eq:hash_chain}) e a escrita de anexação no arquivo JSONL são executados dentro de um mecanismo de ordenação linear livre de condições de corrida, mantendo o tempo de cálculo em poucos microssegundos por evento.
+
+\subsection{Submódulo Verificador de Integridade e Reconstrução Causal}
+\label{subsec:verificador_forense}
+
+Executado sob demanda por auditores ou automaticamente na inicialização e manutenção do gateway \cite{hou2025mcp,jang2026hierarchical}, o algoritmo verificador percorre o arquivo JSONL do registro $1$ ao $n$ em tempo linear $O(n)$ validando três invariantes em cada linha $k$:
+\begin{enumerate}
+  \item \textbf{Continuidade Sequencial:} Verifica se $k = k_{\text{anterior}} + 1$, detectando imediatamente a supressão de eventos ou truncamento da trilha;
+  \item \textbf{Integridade do Elo Anterior:} Confirma se o campo \path{prev_hash} do registro $k$ coincide exatamente com o campo \path{curr_hash} do registro $k-1$ (ou com $H_0$ para $k=1$);
+  \item \textbf{Autenticidade de Conteúdo:} Recalcula de forma independente o resumo SHA-256 sobre os campos canônicos de $L_k$ e compara-o ao valor gravado em \path{curr_hash}, apontando o índice exato $k$ caso qualquer caractere tenha sido adulterado.
+\end{enumerate}
+Quando íntegra, a trilha permite agrupar eventos por \path{session_trace_id} ($ID_i$) para reconstruir a linha do tempo exata de incidentes multi-etapas \cite{singh2026mcpsecure}.
+
+% =============================================================================
+% 3.4 MÓDULO DE OBSERVABILIDADE DISTRIBUÍDA E TELEMETRIA EM RUNTIME
+% =============================================================================
+\section{Módulo de Observabilidade Distribuída e Telemetria em \textit{Runtime}}
+\label{sec:modulo_observabilidade}
+
+Enquanto o Módulo~\ref{sec:modulo_auditoria_forense} garante a persistência forense em disco, a operação em produção exige visibilidade em tempo real sobre o tráfego de chamadas, as taxas de bloqueio RBAC e a latência do barramento MCP \cite{jang2026hierarchical,singh2026mcpsecure}. O Módulo de Observabilidade Distribuída e Telemetria em \textit{Runtime} soluciona esse quarto subproblema instrumentando os estágios do \textit{Governance Gateway} segundo o padrão aberto \textbf{OpenTelemetry} (OTel), dividindo-se em três submódulos: Propagação de Contexto W3C e Rastreamento Distribuído (Subseção~\ref{subsec:propagacao_w3c_traces}), Agregação de Métricas de Segurança e Desempenho (Subseção~\ref{subsec:metricas_seguranca_desempenho}), e Correlação Forense-Telemetria e Exportação OTLP (Subseção~\ref{subsec:correlacao_exportacao_otlp}).
+
+
+\subsection{Submódulo de Propagação de Contexto W3C e Rastreamento Distribuído}
+\label{subsec:propagacao_w3c_traces}
+
+Para correlacionar chamadas encadeadas através das fronteiras de processo sem poluir os argumentos funcionais das ferramentas MCP, este submódulo utiliza o objeto reservado \texttt{\_meta} do JSON-RPC 2.0 para transportar os cabeçalhos da especificação \textit{W3C Trace Context}:
+\begin{itemize}
+  \item \textbf{Extração ou Geração de \path{traceparent}:} Ao interceptar uma requisição no Módulo~\ref{sec:modulo_interceptacao}, o submódulo inspeciona \path{params._meta.traceparent}. Caso o \textit{host} já tenha enviado um contexto W3C (\path{00-traceId-parentId-flags}), o gateway adota o identificador de 128 bits recebido; caso contrário, instancia um novo identificador raiz na entrada do barramento;
+  \item \textbf{Segmentos Internos (\textit{Child Spans}):} Para isolar o custo computacional interno do gateway do tempo de resposta do servidor externo, são instanciados três \textit{spans} filhos subordinados à requisição:
+  \begin{enumerate}
+    \item \path{gateway.pdp.evaluate}: Cronometra a avaliação da matriz RBAC, dos predicados de guarda e da máquina de estados;
+    \item \path{gateway.audit.commit}: Cronometra a serialização canônica JSONL e o cálculo recursivo SHA-256;
+    \item \path{mcp.server.forward}: Cronometra o tempo de processamento externo do servidor MCP de destino.
+  \end{enumerate}
+\end{itemize}
+
+\subsection{Submódulo Agregador de Métricas de Segurança e Desempenho}
+\label{subsec:metricas_seguranca_desempenho}
+
+Para validar quantitativamente a hipótese de pesquisa (sobrecarga $< 1{,}0$ ms por chamada e contenção determinística de ataques \cite{singh2026mcpsecure}), este submódulo mantém três famílias de métricas OpenTelemetry em memória:
+\begin{enumerate}
+  \item \textbf{Contadores:} Registram acumuladores atômicos em \path{mcp.gateway.requests.total} (total de mensagens por método e papel RBAC), \path{mcp.gateway.policy.decisions} (total de vereditos \texttt{ALLOW}, \texttt{DENY}, \texttt{DOWNGRADE} e \texttt{HITL}) e \path{mcp.gateway.threats.blocked} (bloqueios por vetor de ataque);
+  \item \textbf{Histogramas de Latência:} Registram em \path{mcp.gateway.overhead.ms} a distribuição empírica do tempo exclusivo de mediação do gateway, permitindo extrair continuamente a mediana ($p50$) e os percentis de cauda ($p95$ e $p99$);
+  \item \textbf{Medidores de Estado:} Monitoram indicadores instantâneos em \path{mcp.gateway.active.sessions} (sessões ativas por nível L0--L3) e \path{mcp.gateway.hitl.pending} (chamadas aguardando aprovação humana em \path{PendingApproval}).
+\end{enumerate}
+
+\subsection{Submódulo de Correlação Forense-Telemetria e Exportação OTLP}
+\label{subsec:correlacao_exportacao_otlp}
+
+Este submódulo acopla a observabilidade em tempo real à auditoria forense por meio de duas operações complementares:
+\begin{itemize}
+  \item \textbf{Acoplamento Bidirecional (\textit{Trace--Hash}):} Antes do cálculo de $H_i$ no Módulo~\ref{sec:modulo_auditoria_forense}, injeta o \path{trace_id} e o \path{span_id} ativos no campo \path{session_trace_id} ($ID_i$) do registro JSONL e, no sentido inverso, anexa o resumo calculado $H_i$ como atributo (\path{audit.sha256_hash}) ao \textit{span} do OpenTelemetry;
+  \item \textbf{Exportação Assíncrona OTLP:} Salva temporariamente os sinais em uma fila rápida que não trava o sistema e envia esses dados em blocos para ferramentas externas, como: Prometheus, Jaeger e Grafana.
+\end{itemize}
+
+% =============================================================================
+% 3.5 INTEGRAÇÃO CONCEITUAL E FUNDAMENTAÇÃO NOS ARTIGOS INSPIRADORES
+% =============================================================================
+\section{Integração Conceitual do Modelo e Fundamentação nos Artigos Inspiradores}
+\label{sec:integracao_bengala}
+
+Apresentados individualmente os quatro módulos do \textit{Governance Gateway}, esta seção consolida a visão integrada da solução conceitual, demonstrando o fluxo operacional fim a fim de uma requisição (Subseção~\ref{subsec:fluxo_fim_a_fim}), o mapeamento detalhado entre os componentes do artefato e os artigos inspiradores revisados na literatura \cite{singh2026mcpsecure,zhang2025acfix,buhler2026agentbound,jang2026hierarchical,hou2025mcp,hasan2026mcp,guo2025measurement} (Subseção~\ref{subsec:mapeamento_artigos_bengala}), e a viabilidade de engenharia concorrente em máquinas virtuais (Subseção~\ref{subsec:engenharia_concorrente_vm}).
+
+\subsection{Fluxo Operacional Integrado Fim a Fim (Ciclo de Vida da Requisição)}
+\label{subsec:fluxo_fim_a_fim}
+
+A eficácia do modelo decorre da interação coordenada entre seus quatro módulos durante o ciclo de vida de uma sessão MCP.
+
+O fluxo integrado desenvolve-se em seis passos encadeados:
+\begin{enumerate}
+  \item \textbf{Estabelecimento de Sessão e Higienização de Catálogo:} O Módulo~\ref{sec:modulo_interceptacao} intercepta \path{initialize}, instancia a sessão no estado \path{ScopedReadOnly} no Módulo~\ref{sec:modulo_rbac_estados} e filtra a resposta de \path{tools/list} contra ferramentas fora de escopo e \textit{Tool Poisoning};
+  \item \textbf{Interceptação de Chamada e Abertura de Rastro:} Captura \path{tools/call}, valida o JSON-RPC 2.0 e aciona o Módulo~\ref{sec:modulo_observabilidade} para extrair ou criar o \path{traceparent} em \path{params._meta};
+  \item \textbf{Avaliação Determinística de Política:} O PDP verifica o papel RBAC, os predicados de argumentos $c(args)$ e a compatibilidade do efeito (\texttt{read}, \texttt{write}, \texttt{delete}) com o nível da sessão (L0--L3);
+  \item \textbf{Contenção de Deriva de Privilégios ou Elevação HITL:} Emite \texttt{DENY} imediato em L2 ou retém a chamada em \path{PendingApproval} para confirmação humana em L3 caso uma mutação seja tentada fora da janela elevada;
+  \item \textbf{Persistência Forense Encadeada por SHA-256:} Grava atomicamente no Módulo~\ref{sec:modulo_auditoria_forense} o registro JSONL $L_i$ com resumo recursivo $H_i$;
+  \item \textbf{Imposição no Canal e Exportação OTLP:} Encaminha a chamada autorizada ou devolve a recusa e exporta assincronamente os \textit{spans} e métricas coletados.
+\end{enumerate}
+
+\subsection{Mapeamento Conceitual com os Artigos Inspiradores (Artigos de Base)}
+\label{subsec:mapeamento_artigos_bengala}
+
+Cada decisão projetual do \textit{Governance Gateway} apoia-se diretamente nos métodos e arquiteturas validados pelos sete artigos revisados no Capítulo~\ref{cap:fundamentacao}, que funcionam como alicerce para os módulos deste capítulo:
+
+\begin{itemize}
+  \item \textbf{Singh e Madisetti \cite{singh2026mcpsecure} (Base dos Módulos 3.1 e 3.2):} Constitui a referência central para a mediação em \textit{runtime} no barramento JSON-RPC. O modelo adota diretamente de Singh e Madisetti a interceptação transparente de \path{tools/list} e \path{tools/call}, a Máquina de Estados de Sessão em quatro níveis (Subseção~\ref{subsec:maquina_estados_l0_l3}), a segregação entre leitura (\texttt{read}) e mutação (\texttt{write}/\texttt{delete}), o rebaixamento seguro (\textit{downgrade}), a elevação supervisionada com janela temporal (HITL, Subseção~\ref{subsec:elevacao_hitl}) e a exploração da Moldagem Comportamental (\textit{Behavioral Shaping}), estendendo o trabalho original com uma matriz RBAC formal e os Módulos 3.3 e 3.4;
+
+  \item \textbf{Zhang et al. \cite{zhang2025acfix} (Base da Matriz RBAC no Módulo 3.2):} Fundamenta a transferência da decisão de autorização do modelo probabilístico para uma taxonomia determinística de RBAC. A Subseção~\ref{subsec:classificacao_matriz_rbac} adapta os três arquétipos universais minerados pelo \textit{ACFIX} (\textit{Admin}, \textit{Operator} e \textit{User}) e a tríade formal \textit{Papel--Operação--Verificação} (Equação~\ref{eq:rbac_autorizacao}) para classificar primitivas e validar argumentos no PDP;
+
+  \item \textbf{Bühler et al. \cite{buhler2026agentbound} (Base dos Predicados Declarativos nos Módulos 3.1 e 3.2):} Fornece a formulação da Lacuna Semântica (\textit{Semantic Gap}) que justifica a mediação no nível do protocolo JSON-RPC, além de inspirar, por meio do esquema \path{AgentManifest}, a sintaxe declarativa do \path{PolicyManifest} e os predicados determinísticos de caminhos de arquivos e domínios permitidos (Subseção~\ref{subsec:classificacao_matriz_rbac});
+
+  \item \textbf{Jang e Lee \cite{jang2026hierarchical} (Base Criptográfica e de Observabilidade nos Módulos 3.3 e 3.4):} Inspira duas frentes do modelo: o uso determinístico da função \textbf{SHA-256} no \textit{MCP Firewall} fundamenta o Módulo~\ref{sec:modulo_auditoria_forense} (evoluindo o hash estático para uma cadeia recursiva JSONL $H_i = \text{SHA-256}(H_{i-1} \| \dots)$), enquanto suas diretrizes de monitoramento alinhadas ao NIST AI RMF 1.0, NIST CSF 2.0 e CIS Controls v8 embasam o Módulo~\ref{sec:modulo_observabilidade} com OpenTelemetry;
+
+  \item \textbf{Hou et al. \cite{hou2025mcp} (Base de Sessão e Auditoria nos Módulos 3.1 a 3.3):} A divisão do ciclo de vida em 4 fases e o diagnóstico da falta de expiração de sessão e de auditoria na Fase de Manutenção inspiram o encapsulamento de processos \textit{stdio} (Subseção~\ref{subsec:adaptacao_transporte}), a reversão automática da janela HITL (Subseção~\ref{subsec:elevacao_hitl}) e o verificador de integridade de logs (Subseção~\ref{subsec:verificador_forense});
+
+  \item \textbf{Hasan et al. \cite{hasan2026mcp} e Guo et al. \cite{guo2025measurement} (Base de Filtros e Transporte Dual):} Os achados de Hasan et al. \cite{hasan2026mcp} sobre \textit{Tool Poisoning} (5,5\%), credenciais expostas (3,6\%) e injeções de comando embasam a higienização de \path{tools/list} (Subseção~\ref{subsec:pep_filtragem}), os filtros léxicos (Subseção~\ref{subsec:classificacao_matriz_rbac}) e o mascaramento de segredos nos logs (Subseção~\ref{subsec:serializacao_jsonl}), enquanto a medição de Guo et al. \cite{guo2025measurement} sobre APIs sensíveis (50,8\%) e transportes (99,4\% \textit{stdio} e \textit{Streamable HTTP}) fundamenta o adaptador de transporte dual (Subseção~\ref{subsec:adaptacao_transporte}).
+\end{itemize}
+
+A Tabela~\ref{tab:mapeamento_modelo_artigos} sintetiza a relação entre cada módulo do modelo conceitual, o artefato produzido, o subproblema atendido e os artigos inspiradores correspondentes.
+
+\begin{table}[H]
+\centering
+\caption{Mapeamento entre os módulos do Modelo Conceitual, artefatos, subproblemas e artigos inspiradores.}
+\label{tab:mapeamento_modelo_artigos}
+\footnotesize
+\setlength{\tabcolsep}{5pt}
+\renewcommand{\arraystretch}{1.3}
+\begin{tabular}{|p{3.2cm}|p{3.8cm}|p{3.9cm}|p{3.4cm}|}
+\hline
+\textbf{Módulo} & \textbf{Artefato} & \textbf{Subproblema} & \textbf{Artigos Inspiradores} \\
+\hline
+\textbf{3.1 Interceptação e Roteamento (PEP)} & Contexto da requisição normalizado e catálogo de ferramentas filtrado. & Falta de mediação transparente no canal de comunicação. & Singh e Madisetti \cite{singh2026mcpsecure}; Guo et al. \cite{guo2025measurement}; Hasan et al. \cite{hasan2026mcp}. \\
+\hline
+\textbf{3.2 Governança, RBAC e Estados (PDP)} & Veredito determinístico de autorização (\texttt{ALLOW}, \texttt{DENY}, \texttt{DOWNGRADE} ou \texttt{HITL}). & Mapeamento de ameaças, controle RBAC e moldagem comportamental. & Singh e Madisetti \cite{singh2026mcpsecure}; Zhang et al. \cite{zhang2025acfix}; Bühler et al. \cite{buhler2026agentbound}. \\
+\hline
+\textbf{3.3 Auditoria Forense Imutável} & Trilha de auditoria estruturada em JSONL encadeada via SHA-256. & Ausência de registros imutáveis contra adulteração. & Jang e Lee \cite{jang2026hierarchical}; Hou et al. \cite{hou2025mcp}; Hasan et al. \cite{hasan2026mcp}. \\
+\hline
+\textbf{3.4 Observabilidade em \textit{Runtime}} & Rastreamento distribuído (\textit{spans}) e métricas exportadas via OpenTelemetry. & Falta de telemetria em tempo real e aferição de latência $< 1$ ms. & Jang e Lee \cite{jang2026hierarchical}; Singh e Madisetti \cite{singh2026mcpsecure}; Hou et al. \cite{hou2025mcp}. \\
+\hline
+\end{tabular}
+\caption*{Fonte: Elaborado pelo autor (2026).}
+\end{table}
+
+\subsection{Viabilidade de Engenharia Concorrente em Máquinas Virtuais}
+\label{subsec:engenharia_concorrente_vm}
+
+Para que o modelo conceitual cumpra a meta de adicionar menos de $1{,}0$ ms de latência por chamada JSON-RPC sob múltiplas sessões simultâneas, sua arquitetura interna foi projetada segundo o paradigma de \textbf{concorrência orientada a passagem de mensagens e isolamento de estado}. Em máquinas virtuais de alta concorrência (como a máquina virtual BEAM do ecossistema Elixir/Erlang ou a JVM com \textit{Virtual Threads} em Java), cada componente mapeia-se para primitivas leves de execução:
+\begin{enumerate}
+  \item \textbf{Isolamento de Sessão por Processo Leve ou Ator:} Cada sessão ativa $s \in S$ mantém em memória privada seu estado atual $q \in Q$, seu papel RBAC e o temporizador da janela HITL ($\Delta t$), eliminando travas globais (\textit{locks}) de sincronização durante a avaliação do PDP;
+  \item \textbf{Tabelas de Políticas Imutáveis em Memória:} Os manifestos declarativos e matrizes RBAC são compilados na inicialização em tabelas de busca $O(1)$ compartilhadas em modo somente-leitura, permitindo a avaliação em dezenas de microssegundos;
+  \item \textbf{Serialização Atômica Não-Bloqueante:} O acumulador recursivo SHA-256 opera como um sequenciador dedicado em memória e o exportador OTLP funciona de modo assíncrono via buffer circular, fora do caminho crítico de resposta ao agente.
+\end{enumerate}
