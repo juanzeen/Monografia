@@ -3,11 +3,10 @@
 % --- Pacotes Fundamentais ---
 \usepackage[utf8]{inputenc}
 \usepackage[T1]{fontenc}
-\usepackage[brazil]{babel}
+\usepackage[portuguese]{babel}
 \usepackage{amsmath,amsfonts,amssymb}
 \usepackage{graphicx}
 \usepackage{booktabs}
-\usepackage{microtype}
 \usepackage{url}
 \usepackage{float}
 \usepackage{titlesec}
@@ -25,33 +24,34 @@
 
 % --- Configurações de Hiperlinks ---
 \hypersetup{
-            colorlinks=true,
-            linkcolor=black,
-            citecolor=black,
-            urlcolor=black,
-            }
+  colorlinks=true,
+  linkcolor=black,
+  citecolor=black,
+  urlcolor=black,
+}
+
 
 % --- Citações e Referências no Padrão ABNT (NBR 6023 / NBR 10520) ---
 \usepackage[alf,abnt-emphasize=bf]{abntex2cite}
 \DeclareUrlCommand\path{\def\UrlLeft{}\def\UrlRight{}\urlstyle{tt}}
 
-% --- Ajuste dos Títulos de Capítulos e Seções ---
-\titleformat{\chapter}[hang]
-  {\normalfont\bfseries\LARGE}{\thechapter}{1em}{}
-\titlespacing*{\chapter}{0pt}{-20pt}{20pt}
+\titleformat{\chapter}[display] % [display] coloca o título em uma nova linha
+{\normalfont\bfseries\huge}   % Estilo do texto (Negrito e tamanho Grande)
+{\chaptertitlename\ \thechapter} % Rótulo: "Capítulo" + número
+{10pt}                        % Espaço vertical entre o número e o nome do capítulo
+{\huge}                       % Estilo aplicado apenas ao nome do capítulo
 
 \titleformat{\section}[hang]
-  {\normalfont\bfseries\Large}{\thesection}{1em}{}
+{\normalfont\bfseries\Large}{\thesection}{1em}{}
 \titlespacing*{\section}{0pt}{15pt}{10pt}
 
 \titleformat{\subsection}[hang]
-  {\normalfont\bfseries\large}{\thesubsection}{1em}{}
+{\normalfont\bfseries\large}{\thesubsection}{1em}{}
 \titlespacing*{\subsection}{0pt}{12pt}{8pt}
 
 \cftsetindents{chapter}{0em}{1.0em}
 \cftsetindents{section}{1.3em}{1.5em}
 \cftsetindents{subsection}{2.5em}{2.5em}
-
 
 \begin{document}
 
@@ -59,37 +59,37 @@
 % ELEMENTOS PRÉ-TEXTUAIS: CAPA E FOLHA DE ROSTO
 % -----------------------------------------------------------------------------
 \begin{titlepage}
-    \centering
-    {\large \textbf{UNIVERSIDADE ESTADUAL DO NORTE FLUMINENSE DARCY RIBEIRO}\par}
-    \vspace*{3cm}
-    {\large \textbf{JUAN AUGUSTO CRISTO HYGINO}\par}
-    \vspace{5cm}
-    {\large \textbf{ENGENHARIA DE UMA CAMADA DE GOVERNANÇA, AUDITORIA FORENSE E OBSERVABILIDADE EM TEMPO DE EXECUÇÃO PARA ECOSSISTEMAS BASEADOS NO MODEL CONTEXT PROTOCOL (MCP)}\par}
-    \vfill
-    {\large \textbf{Campos dos Goytacazes}\par}
-    {\large \textbf{2026}\par}
-    \vspace*{1cm}
+  \centering
+  {\large \textbf{UNIVERSIDADE ESTADUAL DO NORTE FLUMINENSE DARCY RIBEIRO}\par}
+  \vspace*{3cm}
+  {\large \textbf{JUAN AUGUSTO CRISTO HYGINO}\par}
+  \vspace{5cm}
+  {\large \textbf{Governance Gateway: Governança, Auditoria e Observabilidade em Tempo de Execução no Ecossistema MCP}\par}
+  \vfill
+  {\large \textbf{Campos dos Goytacazes}\par}
+  {\large \textbf{2026}\par}
+  \vspace*{1cm}
 \end{titlepage}
 
- \begin{titlepage}
-     \centering
-     \vspace*{1cm}
-     {\large \textbf{JUAN AUGUSTO CRISTO HYGINO}\par}
-     \vspace{4.5cm}
-     {\large \textbf{ENGENHARIA DE UMA CAMADA DE GOVERNANÇA, AUDITORIA FORENSE E OBSERVABILIDADE EM TEMPO DE EXECUÇÃO PARA ECOSSISTEMAS BASEADOS NO MODEL CONTEXT PROTOCOL (MCP)}\par}
-     \vspace{2.5cm}
-     \hfill
-     \begin{minipage}{0.52\textwidth}
-         \linespread{1.1}\selectfont
-         Monografia submetida como requisito parcial para a obtenção do grau de Bacharel em Ciência da Computação.\\[0.4cm]
-         \textbf{Orientador:} Profa. Dra. Annabel D.R. Tamariz
-     \end{minipage}
-     \vfill
-    {\large \textbf{Campos dos Goytacazes}\par}
+\begin{titlepage}
+  \centering
+  \vspace*{1cm}
+  {\large \textbf{JUAN AUGUSTO CRISTO HYGINO}\par}
+  \vspace{4.5cm}
+  {\large \textbf{Governance Gateway: Governança, Auditoria e Observabilidade em Tempo de Execução no Ecossistema MCP}\par}
+  \vspace{2.5cm}
+  \hfill
+  \begin{minipage}{0.52\textwidth}
+    \linespread{1.1}\selectfont
+    Monografia submetida como requisito parcial para a obtenção do grau de Bacharel em Ciência da Computação.\\[0.4cm]
+    \textbf{Orientador:} Profa. Dra. Annabel D.R. Tamariz
+  \end{minipage}
+  \vfill
+  {\large \textbf{Campos dos Goytacazes}\par}
 
-     {\large \textbf{2026}\par}
-     \vspace*{1cm}
- \end{titlepage}
+  {\large \textbf{2026}\par}
+  \vspace*{1cm}
+\end{titlepage}
 
 % --- Sumário ---
 \tableofcontents

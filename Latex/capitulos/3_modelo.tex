@@ -43,7 +43,7 @@ Na prática, este módulo posiciona-se como um \textit{proxy} intermediário: el
   \caption*{Fonte: Elaborado pelo autor (2026).}
 \end{figure}
 
-\subsection{Submódulo de Adaptação dos Canais de Transporte}
+\subsection{Adaptação dos Canais de Transporte}
 \label{subsec:adaptacao_transporte}
 
 Conforme demonstrado por Guo et al. \cite{guo2025measurement}, 99,4\% dos servidores MCP operam localmente via entrada e saída padrão (\textit{stdio}), enquanto servidores remotos utilizam \textit{Streamable HTTP}. Para suportar ambos os cenários sem modificar os sistemas existentes, este submódulo opera em dois modos transparentes:
@@ -52,7 +52,7 @@ Conforme demonstrado por Guo et al. \cite{guo2025measurement}, 99,4\% dos servid
   \item \textbf{Interceptação Remota (\textit{Streamable HTTP}):} Para servidores em rede, o submódulo atua como um \textit{reverse proxy} HTTP que recebe as requisições do cliente, preserva o cabeçalho de sessão (\path{Mcp-Session-Id}) e repassa ao servidor remoto apenas as chamadas autorizadas \cite{singh2026mcpsecure}.
 \end{itemize}
 
-\subsection{Submódulo de Decodificação e Extração de Contexto JSON-RPC}
+\subsection{Decodificação e Extração de Contexto JSON-RPC}
 \label{subsec:normalizador_jsonrpc}
 
 Uma vez capturada a mensagem no canal de transporte, este submódulo valida a estrutura JSON-RPC 2.0 e monta em memória o \textbf{Contexto de Interceptação} ($\mathcal{C}_{\text{req}}$) que será enviado aos demais módulos. Esse processo resume-se à extração de três informações principais:
@@ -62,7 +62,7 @@ Uma vez capturada a mensagem no canal de transporte, este submódulo valida a es
   \item \textbf{Vínculo de Sessão e Tempo:} Associa a mensagem ao identificador da sessão ativa ($s \in S$) e registra o instante exato de chegada ($t_{\text{in}}$) para medição da latência interna do gateway.
 \end{enumerate}
 
-\subsection{Submódulo de Filtragem de Catálogo e Imposição de Política (PEP)}
+\subsection{Filtragem de Catálogo e Imposição de Política (PEP)}
 \label{subsec:pep_filtragem}
 
 O terceiro submódulo executa de fato a filtragem e o controle sobre o tráfego \cite{singh2026mcpsecure,hasan2026mcp}. Quando o servidor responde a uma consulta de descoberta (\path{tools/list}), o PEP realiza a \textbf{filtragem de escopo}, ocultando ferramentas que não pertencem ao papel do agente e a \textbf{higienização de descrições}, removendo instruções maliciosas ocultas nos campos \texttt{description} (\textit{Tool Poisoning}) \cite{hasan2026mcp,hou2025mcp} antes que cheguem ao modelo de linguagem.
@@ -94,7 +94,7 @@ Este módulo recebe o Contexto de Interceptação $\mathcal{C}_{\text{req}}$, av
   \caption*{Fonte: Elaborado pelo autor (2026).}
 \end{figure}
 
-\subsection{Submódulo de Classificação de Ferramentas e Matriz RBAC}
+\subsection{Classificação de Ferramentas e Matriz RBAC}
 \label{subsec:classificacao_matriz_rbac}
 
 Inspirado nos três perfis de acesso do framework \textit{ACFIX} \cite{zhang2025acfix} e no modelo declarativo do \textit{AgentBound} \cite{buhler2026agentbound}, este submódulo define as regras de permissão em um arquivo de políticas (\path{PolicyManifest}). Nesse manifesto, cada sessão do agente recebe um entre três papéis de acesso (RBAC):
@@ -114,7 +114,7 @@ Entretanto, autorizar apenas o nome da ferramenta não é suficiente: mesmo que 
   \item \textbf{Limite de Taxa de Requisições (\textit{Rate Limit}):} Limita a quantidade máxima de chamadas por sessão em um intervalo de tempo, interrompendo loops infinitos do agente ou tentativas de exfiltração de dados em massa.
 \end{enumerate}
 
-\subsection{Submódulo de Máquina de Estados de Sessão (Níveis L0 a L3)}
+\subsection{Máquina de Estados de Sessão (Níveis L0 a L3)}
 \label{subsec:maquina_estados_l0_l3}
 
 Para impedir que sessões com permissão nominal de escrita sofram deriva de privilégios (\textit{Privilege Drift}) após lerem conteúdos externos contaminados, o segundo submódulo mantém uma \textbf{Máquina de Estados Finitos de Segurança} para cada sessão $s$, operando nos quatro níveis progressivos propostos por Singh e Madisetti \cite{singh2026mcpsecure}:
@@ -127,7 +127,7 @@ Para impedir que sessões com permissão nominal de escrita sofram deriva de pri
 
 Formalmente, a máquina em nível L3 é definida pela quíntupla $\mathcal{M}_s = (Q, \Sigma, \delta, q_0, F)$ sobre os estados discretos \path{Init}, \path{ScopedReadOnly}, \path{PendingApproval}, \path{ElevatedWindow} e \path{Revoked}, com estado inicial $q_0 = \text{\texttt{ScopedReadOnly}}$. Essa contenção induz diretamente a \textbf{Moldagem Comportamental} (\textit{Behavioral Shaping}): ao receber recusas determinísticas quando tenta sair de \path{ScopedReadOnly} sem autorização, o modelo reajusta seu ciclo interno para concluir a tarefa com operações seguras \cite{singh2026mcpsecure}.
 
-\subsection{Submódulo de Elevação Supervisionada com Janela Temporal (\textit{HITL})}
+\subsection{Elevação Supervisionada com Janela Temporal (\textit{HITL})}
 \label{subsec:elevacao_hitl}
 
 Quando uma sessão em Nível L3 encontra-se em \path{ScopedReadOnly} e o agente emite uma chamada \path{tools/call} de escrita ou exclusão (\texttt{write} ou \texttt{delete}) que já foi aprovada pelas regras de papel e validação de argumentos da Subseção~\ref{subsec:classificacao_matriz_rbac}, este submódulo executa três passos \cite{singh2026mcpsecure,hou2025mcp}:
@@ -153,7 +153,7 @@ O bloqueio preventivo em \textit{runtime} precisa ser complementado por perícia
   \caption*{Fonte: Elaborado pelo autor (2026).}
 \end{figure}
 
-\subsection{Submódulo de Serialização Canônica e Registro Estruturado (JSONL)}
+\subsection{Serialização Canônica e Registro Estruturado (JSONL)}
 \label{subsec:serializacao_jsonl}
 
 Para que o resumo criptográfico seja determinístico e reprodutível sem ambiguidades de formatação, o Submódulo de Serialização Canônica estrutura cada evento interceptado $i$ como um documento JSON de linha única (\textit{JSON Lines} - JSONL) com dez campos ordenados lexicograficamente:
@@ -170,12 +170,12 @@ Para que o resumo criptográfico seja determinístico e reprodutível sem ambigu
   \item \path{curr_hash} ($H_i$): Resumo hexadecimal SHA-256 de 64 caracteres calculado sobre a concatenação canônica dos nove campos anteriores.
 \end{enumerate}
 
-\subsection{Submódulo de Encadeamento Criptográfico Recursivo (SHA-256)}
+\subsection{Encadeamento Criptográfico Recursivo (SHA-256)}
 \label{subsec:encadeamento_sha256}
 
 Evoluindo a verificação estática de integridade por SHA-256 do \textit{MCP Firewall} de Jang e Lee \cite{jang2026hierarchical} para um fluxo contínuo em \textit{runtime}, este submódulo mantém em memória protegida um acumulador atômico que armazena o último resumo gerado ($H_{\text{last}}$) e o contador sequencial ($i$), inicializado com o bloco gênese $H_0 = 0^{256}$ (64 dígitos zeros hexadecimais). Para assegurar consistência estrita sob múltiplas sessões concorrentes no mesmo \textit{host}, o cálculo de $H_i$ (Equação~\ref{eq:hash_chain}) e a escrita de anexação no arquivo JSONL são executados dentro de um mecanismo de ordenação linear livre de condições de corrida, mantendo o tempo de cálculo em poucos microssegundos por evento.
 
-\subsection{Submódulo Verificador de Integridade e Reconstrução Causal}
+\subsection{Integridade e Reconstrução Causal}
 \label{subsec:verificador_forense}
 
 Executado sob demanda por auditores ou automaticamente na inicialização e manutenção do gateway \cite{hou2025mcp,jang2026hierarchical}, o algoritmo verificador percorre o arquivo JSONL do registro $1$ ao $n$ em tempo linear $O(n)$ validando três invariantes em cada linha $k$:
@@ -195,7 +195,7 @@ Quando íntegra, a trilha permite agrupar eventos por \path{session_trace_id} ($
 Enquanto o Módulo~\ref{sec:modulo_auditoria_forense} garante a persistência forense em disco, a operação em produção exige visibilidade em tempo real sobre o tráfego de chamadas, as taxas de bloqueio RBAC e a latência do barramento MCP \cite{jang2026hierarchical,singh2026mcpsecure}. O Módulo de Observabilidade Distribuída e Telemetria em \textit{Runtime} soluciona esse quarto subproblema instrumentando os estágios do \textit{Governance Gateway} segundo o padrão aberto \textbf{OpenTelemetry} (OTel), dividindo-se em três submódulos: Propagação de Contexto W3C e Rastreamento Distribuído (Subseção~\ref{subsec:propagacao_w3c_traces}), Agregação de Métricas de Segurança e Desempenho (Subseção~\ref{subsec:metricas_seguranca_desempenho}), e Correlação Forense-Telemetria e Exportação OTLP (Subseção~\ref{subsec:correlacao_exportacao_otlp}).
 
 
-\subsection{Submódulo de Propagação de Contexto W3C e Rastreamento Distribuído}
+\subsection{Propagação de Contexto W3C e Rastreamento Distribuído}
 \label{subsec:propagacao_w3c_traces}
 
 Para correlacionar chamadas encadeadas através das fronteiras de processo sem poluir os argumentos funcionais das ferramentas MCP, este submódulo utiliza o objeto reservado \texttt{\_meta} do JSON-RPC 2.0 para transportar os cabeçalhos da especificação \textit{W3C Trace Context}:
@@ -209,7 +209,7 @@ Para correlacionar chamadas encadeadas através das fronteiras de processo sem p
   \end{enumerate}
 \end{itemize}
 
-\subsection{Submódulo Agregador de Métricas de Segurança e Desempenho}
+\subsection{Métricas de Segurança e Desempenho}
 \label{subsec:metricas_seguranca_desempenho}
 
 Para validar quantitativamente a hipótese de pesquisa (sobrecarga $< 1{,}0$ ms por chamada e contenção determinística de ataques \cite{singh2026mcpsecure}), este submódulo mantém três famílias de métricas OpenTelemetry em memória:
@@ -219,7 +219,7 @@ Para validar quantitativamente a hipótese de pesquisa (sobrecarga $< 1{,}0$ ms 
   \item \textbf{Medidores de Estado:} Monitoram indicadores instantâneos em \path{mcp.gateway.active.sessions} (sessões ativas por nível L0--L3) e \path{mcp.gateway.hitl.pending} (chamadas aguardando aprovação humana em \path{PendingApproval}).
 \end{enumerate}
 
-\subsection{Submódulo de Correlação Forense-Telemetria e Exportação OTLP}
+\subsection{Correlação Forense-Telemetria e Exportação OTLP}
 \label{subsec:correlacao_exportacao_otlp}
 
 Este submódulo acopla a observabilidade em tempo real à auditoria forense por meio de duas operações complementares:
