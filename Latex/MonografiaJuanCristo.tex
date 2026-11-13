@@ -33,6 +33,8 @@
 
 % --- Citações e Referências no Padrão ABNT (NBR 6023 / NBR 10520) ---
 \usepackage[alf,abnt-emphasize=bf]{abntex2cite}
+\let\oldabntrefinfo\abntrefinfo
+\renewcommand{\abntrefinfo}[3]{\oldabntrefinfo{#1}{#1}{#3}}
 \DeclareUrlCommand\path{\def\UrlLeft{}\def\UrlRight{}\urlstyle{tt}}
 
 \titleformat{\chapter}[display] % [display] coloca o título em uma nova linha
